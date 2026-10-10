@@ -51,7 +51,8 @@ claude --plugin-dir ./plugins/<mod-name>
 | --- | --- | --- |
 | `vesuvius-theme` | A spinner with a glowing crater and volcanic words, a stripe of color beside every tool call (magma while it runs, lava when it fails, ash once done), and the end-of-turn line as an eruption (`▲ Erupted for 1m 4s`) | Terminal; on the desktop, only the tool call rows |
 | `touched-files` | `/touched-files` opens a pane listing the files read (`R`) and edited (`M`, with `+`/`-`) this turn; press a file to see its diff. At the end of a turn a toast says how many files changed | Terminal and desktop |
-| `context-map` | A band above the prompt with the context window split by category, a percentage that turns from tuff to magma to lava past 60% and 85%, and `details` for the legend | Terminal and desktop |
+| `context-map` | A band above the prompt with the context window split by category and a legend under it (`hide`/`legend` toggles it), a percentage that turns from tuff to magma to lava past 60% and 85%. `details` or `/context-map` opens a pane with every category's tokens and share, the auto-compact threshold, and what fills the window: memory files, MCP servers, custom agents, skills | Terminal and desktop |
+| `agent-usage` | `/agent-usage` opens a pane with the tokens the main conversation and each subagent consumed, their share and status; press a row for model, input/output/cache tokens, requests, tool calls and run time. The status line shows the subagents running, and a toast says what each one consumed when it finishes | Terminal and desktop |
 
 ## The palette
 
