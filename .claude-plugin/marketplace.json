@@ -6,5 +6,21 @@
   "metadata": {
     "description": "Mod di interfaccia per Claude Code di pompeitech"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "vesuvius-theme",
+      "source": "./plugins/vesuvius-theme",
+      "description": "Spinner, righe delle tool call e fine turno nei colori del design system Vesuvius"
+    },
+    {
+      "name": "file-toccati",
+      "source": "./plugins/file-toccati",
+      "description": "Pannello con i file letti e modificati nel turno, con il diff di ciascuno"
+    },
+    {
+      "name": "mappa-contesto",
+      "source": "./plugins/mappa-contesto",
+      "description": "Barra sopra il prompt con l'occupazione del contesto per categoria"
+    }
+  ]
 }

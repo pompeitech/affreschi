@@ -1,0 +1,6 @@
+{
+  "name": "vesuvius-theme",
+  "version": "0.1.0",
+  "description": "Spinner, righe delle tool call e fine turno nei colori del design system Vesuvius",
+  "author": { "name": "Davide D'Antonio" }
+}

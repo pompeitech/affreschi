@@ -1,0 +1,7 @@
+{
+  "name": "mappa-contesto",
+  "version": "0.1.0",
+  "description": "Barra sopra il prompt con l'occupazione del contesto per categoria, nei colori Vesuvius",
+  "author": { "name": "Davide D'Antonio" },
+  "types": "./types/index.d.ts"
+}
