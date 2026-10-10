@@ -1,0 +1,10 @@
+{
+  "name": "affreschi",
+  "owner": {
+    "name": "Davide D'Antonio"
+  },
+  "metadata": {
+    "description": "Mod di interfaccia per Claude Code di pompeitech"
+  },
+  "plugins": []
+}
