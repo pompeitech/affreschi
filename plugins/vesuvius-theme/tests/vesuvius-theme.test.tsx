@@ -1,31 +1,31 @@
 import { expect, test } from 'claude-code/testing'
 
-import { durata, scegli } from '../hooks/register'
-import { VESUVIUS } from '../hooks/vesuvius'
+import { formatDuration, pick } from '../hooks/register'
+import { VESUVIUS } from '../hooks/palette'
 
-test('durata formatta secondi e minuti', async () => {
-  expect(durata(3_200)).toBe('3s')
-  expect(durata(64_000)).toBe('1m 4s')
+test('formatDuration formats seconds and minutes', async () => {
+  expect(formatDuration(3_200)).toBe('3s')
+  expect(formatDuration(64_000)).toBe('1m 4s')
 })
 
-test('scegli resta sempre dentro la lista', async () => {
-  expect(scegli(['a', 'b', 'c'], 4)).toBe('b')
-  expect(scegli(['a', 'b', 'c'], -1)).toBe('b')
+test('pick always stays inside the list', async () => {
+  expect(pick(['a', 'b', 'c'], 4)).toBe('b')
+  expect(pick(['a', 'b', 'c'], -1)).toBe('b')
 })
 
-test('lo spinner del terminale prende i colori della lava', async $ => {
+test('the terminal spinner takes the lava colors', async $ => {
   const ui = await $.ui.mount({
     plugin: 'vesuvius-theme',
     surface: 'terminal',
     component: 'Spinner',
     props: { word: 'Sauteing', message: null, suffix: '…', mode: 'thinking' },
   })
-  const parola = await ui.find({ type: 'Text', text: /…$/ })
-  expect(parola?.props.color).toBe(VESUVIUS.magma)
+  const word = await ui.find({ type: 'Text', text: /…$/ })
+  expect(word?.props.color).toBe(VESUVIUS.magma)
   await ui.unmount()
 })
 
-test('un messaggio di stato vince sulla parola vulcanica', async $ => {
+test('a status message wins over the volcanic word', async $ => {
   const ui = await $.ui.mount({
     plugin: 'vesuvius-theme',
     surface: 'terminal',
@@ -36,13 +36,13 @@ test('un messaggio di stato vince sulla parola vulcanica', async $ => {
   await ui.unmount()
 })
 
-test('la riga di fine turno diventa un’eruzione', async $ => {
+test('the end-of-turn line becomes an eruption', async $ => {
   const ui = await $.ui.mount({
     plugin: 'vesuvius-theme',
     surface: 'terminal',
     component: 'TurnDuration',
     props: { word: 'Baked', durationMs: 64_000 },
   })
-  expect(await ui.find({ type: 'Text', text: / per 1m 4s$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: / for 1m 4s$/ })).toBeDefined()
   await ui.unmount()
 })

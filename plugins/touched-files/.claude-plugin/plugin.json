@@ -1,0 +1,7 @@
+{
+  "name": "touched-files",
+  "version": "0.1.0",
+  "description": "A pane listing the files read and edited this turn, with each one's diff, in Vesuvius colors",
+  "author": { "name": "Davide D'Antonio" },
+  "types": "./types/index.d.ts"
+}

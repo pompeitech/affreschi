@@ -1,7 +1,0 @@
-{
-  "name": "file-toccati",
-  "version": "0.1.0",
-  "description": "Pannello con i file letti e modificati nel turno, con il diff di ciascuno, nei colori Vesuvius",
-  "author": { "name": "Davide D'Antonio" },
-  "types": "./types/index.d.ts"
-}

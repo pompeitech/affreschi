@@ -1,4 +1,4 @@
-export type FileToccato = {
+export type TouchedFile = {
   path: string
   isRead: boolean
   isEdited: boolean
@@ -9,6 +9,6 @@ export type FileToccato = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'file-toccati': { files: FileToccato[]; selected: string | null }
+    'touched-files': { files: TouchedFile[]; selected: string | null }
   }
 }

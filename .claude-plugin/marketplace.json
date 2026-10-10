@@ -4,23 +4,23 @@
     "name": "Davide D'Antonio"
   },
   "metadata": {
-    "description": "Mod di interfaccia per Claude Code di pompeitech"
+    "description": "Claude Code interface mods for pompeitech, in Vesuvius colors"
   },
   "plugins": [
     {
       "name": "vesuvius-theme",
       "source": "./plugins/vesuvius-theme",
-      "description": "Spinner, righe delle tool call e fine turno nei colori del design system Vesuvius"
+      "description": "Spinner, tool call rows and end-of-turn line in Vesuvius colors"
     },
     {
-      "name": "file-toccati",
-      "source": "./plugins/file-toccati",
-      "description": "Pannello con i file letti e modificati nel turno, con il diff di ciascuno"
+      "name": "touched-files",
+      "source": "./plugins/touched-files",
+      "description": "A pane listing the files read and edited this turn, with each one's diff"
     },
     {
-      "name": "mappa-contesto",
-      "source": "./plugins/mappa-contesto",
-      "description": "Barra sopra il prompt con l'occupazione del contesto per categoria"
+      "name": "context-map",
+      "source": "./plugins/context-map",
+      "description": "A bar above the prompt showing how the context window fills up by category"
     }
   ]
 }

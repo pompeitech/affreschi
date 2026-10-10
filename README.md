@@ -1,62 +1,65 @@
 # affreschi
 
-Mod di interfaccia per Claude Code, raccolte in un marketplace privato di pompeitech.
-Come gli affreschi decoravano le pareti delle domus, queste mod decorano l'interfaccia di Claude Code.
+Claude Code interface mods, collected in a private pompeitech marketplace.
+Just as frescoes decorated the walls of Pompeii's houses, these mods decorate Claude Code's interface.
 
-## Struttura
+## Layout
 
 ```
 affreschi/
-├── .claude-plugin/marketplace.json   # elenco delle mod
+├── .claude-plugin/marketplace.json   # the list of mods
 └── plugins/
-    └── <nome-mod>/                   # una cartella (un plugin) per ogni mod
+    └── <mod-name>/                   # one folder (one plugin) per mod
         ├── .claude-plugin/plugin.json
-        └── hooks/
-            ├── hooks.json
-            └── register.js
+        ├── hooks/
+        │   ├── hooks.json
+        │   ├── palette.ts            # Vesuvius colors
+        │   └── register.tsx
+        ├── types/index.d.ts          # the mod's $.state contract, when it has one
+        └── tests/
 ```
 
-## Aggiungere una mod
+## Adding a mod
 
-1. Crea la cartella `plugins/<nome-mod>/` con i suoi file.
-2. Aggiungila all'array `plugins` di `.claude-plugin/marketplace.json`:
+1. Create the folder `plugins/<mod-name>/` with its files.
+2. Add it to the `plugins` array in `.claude-plugin/marketplace.json`:
 
    ```json
-   { "name": "<nome-mod>", "source": "./plugins/<nome-mod>", "description": "..." }
+   { "name": "<mod-name>", "source": "./plugins/<mod-name>", "description": "..." }
    ```
 
-3. Controlla che sia valida: `claude plugin validate ./plugins/<nome-mod>`
+3. Check it: `claude plugin validate ./plugins/<mod-name>`
 
-## Sviluppo
+## Development
 
-Carica una mod solo per la sessione corrente (si ricarica quando salvi):
+Load a mod for the current session only (it reloads when you save):
 
 ```bash
-claude --plugin-dir ./plugins/<nome-mod>
+claude --plugin-dir ./plugins/<mod-name>
 ```
 
-## Installazione
+## Installing
 
 ```bash
 /plugin marketplace add pompeitech/affreschi
-/plugin install <nome-mod>@affreschi
+/plugin install <mod-name>@affreschi
 ```
 
-## Le mod
+## The mods
 
-| Mod | Cosa fa | Dove si vede |
+| Mod | What it does | Where it shows |
 | --- | --- | --- |
-| `vesuvius-theme` | Spinner con il bagliore del cratere e parole vulcaniche, una colata di colore accanto a ogni tool call (magma mentre gira, lava se fallisce, cenere a fine corsa), e la riga di fine turno come eruzione (`▲ Eruttato per 1m 4s`) | Terminale; sul desktop solo le righe delle tool call |
-| `file-toccati` | `/file-toccati` apre un pannello con i file letti (`R`) e modificati (`M`, con `+`/`-`) nel turno; premi un file per vederne il diff. A fine turno un toast ricorda quanti file sono cambiati | Terminale e desktop |
-| `mappa-contesto` | Banda sopra il prompt con il contesto diviso per categoria, percentuale che passa da tufo a magma a lava oltre il 60% e l'85%, e `dettagli` per la legenda | Terminale e desktop |
+| `vesuvius-theme` | A spinner with a glowing crater and volcanic words, a stripe of color beside every tool call (magma while it runs, lava when it fails, ash once done), and the end-of-turn line as an eruption (`▲ Erupted for 1m 4s`) | Terminal; on the desktop, only the tool call rows |
+| `touched-files` | `/touched-files` opens a pane listing the files read (`R`) and edited (`M`, with `+`/`-`) this turn; press a file to see its diff. At the end of a turn a toast says how many files changed | Terminal and desktop |
+| `context-map` | A band above the prompt with the context window split by category, a percentage that turns from tuff to magma to lava past 60% and 85%, and `details` for the legend | Terminal and desktop |
 
-## La palette
+## The palette
 
-I colori stanno in `hooks/vesuvius.ts` di ogni mod (un plugin non può importare file di un altro, quindi è copiato in tutte e tre). Sono provvisori: vanno sostituiti con quelli del design system Vesuvius.
+The colors live in each mod's `hooks/palette.ts` (a plugin cannot import another plugin's files, so all three keep a copy). They are placeholders, to be replaced with the Vesuvius design system's.
 
-## Test
+## Tests
 
 ```bash
-claude plugin validate ./plugins/<nome-mod>
-claude plugin test ./plugins/<nome-mod>
+claude plugin validate ./plugins/<mod-name>
+claude plugin test ./plugins/<mod-name>
 ```
