@@ -20,7 +20,12 @@
     {
       "name": "context-map",
       "source": "./plugins/context-map",
-      "description": "A bar above the prompt showing how the context window fills up by category"
+      "description": "A bar above the prompt showing how the context window fills up by category, with a legend and a full breakdown pane"
+    },
+    {
+      "name": "agent-usage",
+      "source": "./plugins/agent-usage",
+      "description": "A pane showing how many tokens the main conversation and each subagent consumed"
     }
   ]
 }
