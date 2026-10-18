@@ -1,6 +1,6 @@
 {
   "name": "agent-usage",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "A pane showing how many tokens the main conversation and each subagent consumed, in Vesuvius colors",
   "author": { "name": "Davide D'Antonio" },
   "types": "./types/index.d.ts"

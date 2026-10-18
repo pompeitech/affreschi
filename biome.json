@@ -1,0 +1,22 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+  "files": {
+    "includes": ["plugins/**/*.ts", "plugins/**/*.tsx", "!plugins/**/.claude-plugin/types/**"]
+  },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "asNeeded",
+      "trailingCommas": "none",
+      "arrowParentheses": "asNeeded"
+    },
+    "jsxRuntime": "reactClassic"
+  },
+  "linter": {
+    "rules": {
+      "style": { "useBlockStatements": "error", "useConst": "error" }
+    }
+  }
+}

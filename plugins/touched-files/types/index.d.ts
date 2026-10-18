@@ -9,6 +9,6 @@ export type TouchedFile = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'touched-files': { files: TouchedFile[]; selected: string | null }
+    'touched-files': { files: TouchedFile[]; selected: string | null; isStale: boolean }
   }
 }

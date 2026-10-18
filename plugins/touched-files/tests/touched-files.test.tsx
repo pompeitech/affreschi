@@ -8,12 +8,12 @@ const PANE_PROPS = {
   bodyColumns: 80,
   placement: 'inline' as const,
   scroll: { offset: 0, bodyRows: 30 },
-  view: {},
+  view: {}
 }
 
 test('toHunks counts added and removed lines and writes @@ headers', async () => {
   const { diff, added, removed } = toHunks([
-    { oldStart: 1, oldLines: 2, newStart: 1, newLines: 2, lines: [' a', '-b', '+c'] },
+    { oldStart: 1, oldLines: 2, newStart: 1, newLines: 2, lines: [' a', '-b', '+c'] }
   ])
   expect(added).toBe(1)
   expect(removed).toBe(1)
@@ -25,7 +25,14 @@ test('recordTouch merges touches of the same file and moves it to the top', asyn
   list = recordTouch(list, { path: '/b.ts', isRead: true })
   list = recordTouch(list, { path: '/a.ts', isEdited: true, added: 3, removed: 1, diff: 'x' })
   expect(list.map(f => f.path)).toEqual(['/a.ts', '/b.ts'])
-  expect(list[0]).toEqual({ path: '/a.ts', isRead: true, isEdited: true, added: 3, removed: 1, diff: 'x' })
+  expect(list[0]).toEqual({
+    path: '/a.ts',
+    isRead: true,
+    isEdited: true,
+    added: 3,
+    removed: 1,
+    diff: 'x'
+  })
 })
 
 test('splitPath separates file and folder', async () => {
@@ -35,25 +42,45 @@ test('splitPath separates file and folder', async () => {
 
 test('the pane lists the touched files and the chosen one’s diff', async ($, on) => {
   // Beneath the mod, in place of the real tools: one read and one edit.
-  on('tool.call', { tool: 'Read' }, async () => ({ result: { type: 'text', file: { filePath: '/src/a.ts', content: 'x', numLines: 1, startLine: 1, totalLines: 1 } } }))
+  on('tool.call', { tool: 'Read' }, async () => ({
+    result: {
+      type: 'text',
+      file: { filePath: '/src/a.ts', content: 'x', numLines: 1, startLine: 1, totalLines: 1 }
+    }
+  }))
   on('tool.call', { tool: 'Edit' }, async () => ({
     result: {
       filePath: '/src/b.ts',
       oldString: 'b',
       newString: 'c',
       originalFile: 'a\nb\n',
-      structuredPatch: [{ oldStart: 1, oldLines: 2, newStart: 1, newLines: 2, lines: [' a', '-b', '+c'] }],
+      structuredPatch: [
+        { oldStart: 1, oldLines: 2, newStart: 1, newLines: 2, lines: [' a', '-b', '+c'] }
+      ],
       userModified: false,
-      replaceAll: false,
-    },
+      replaceAll: false
+    }
   }))
 
   await $.tool.call({ tool: 'Read', tool_use_id: 't1', file_path: '/src/a.ts' })
-  await $.tool.call({ tool: 'Edit', tool_use_id: 't2', file_path: '/src/b.ts', old_string: 'b', new_string: 'c' })
+  await $.tool.call({
+    tool: 'Edit',
+    tool_use_id: 't2',
+    file_path: '/src/b.ts',
+    old_string: 'b',
+    new_string: 'c'
+  })
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'touched-files', surface, component: 'Pane', requestId: 'touched-files', props: PANE_PROPS })
-    expect(await ui.find({ type: 'Text', text: /2 files/ })).toBeDefined()
+    const ui = await $.ui.mount({
+      plugin: 'touched-files',
+      surface,
+      component: 'Pane',
+      requestId: 'touched-files',
+      props: PANE_PROPS
+    })
+    expect(await ui.find({ type: 'Text', text: 'FILES' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '+1' })).toBeDefined()
 
     // The edited file is on top: pressing it shows its diff.
     expect((await ui.find({ key: 'file-0' }))?.text).toMatch(/b\.ts/)

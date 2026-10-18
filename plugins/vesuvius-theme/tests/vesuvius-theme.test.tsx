@@ -1,7 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-
-import { formatDuration, pick } from '../hooks/register'
 import { VESUVIUS } from '../hooks/palette'
+import { formatDuration, pick } from '../hooks/register'
 
 test('formatDuration formats seconds and minutes', async () => {
   expect(formatDuration(3_200)).toBe('3s')
@@ -18,7 +17,7 @@ test('the terminal spinner takes the lava colors', async $ => {
     plugin: 'vesuvius-theme',
     surface: 'terminal',
     component: 'Spinner',
-    props: { word: 'Sauteing', message: null, suffix: '…', mode: 'thinking' },
+    props: { word: 'Sauteing', message: null, suffix: '…', mode: 'thinking' }
   })
   const word = await ui.find({ type: 'Text', text: /…$/ })
   expect(word?.props.color).toBe(VESUVIUS.magma)
@@ -30,7 +29,7 @@ test('a status message wins over the volcanic word', async $ => {
     plugin: 'vesuvius-theme',
     surface: 'terminal',
     component: 'Spinner',
-    props: { word: 'Sauteing', message: 'Compacting', suffix: '…', mode: 'thinking' },
+    props: { word: 'Sauteing', message: 'Compacting', suffix: '…', mode: 'thinking' }
   })
   expect(await ui.find({ type: 'Text', text: 'Compacting…' })).toBeDefined()
   await ui.unmount()
@@ -41,7 +40,7 @@ test('the end-of-turn line becomes an eruption', async $ => {
     plugin: 'vesuvius-theme',
     surface: 'terminal',
     component: 'TurnDuration',
-    props: { word: 'Baked', durationMs: 64_000 },
+    props: { word: 'Baked', durationMs: 64_000 }
   })
   expect(await ui.find({ type: 'Text', text: / for 1m 4s$/ })).toBeDefined()
   await ui.unmount()
