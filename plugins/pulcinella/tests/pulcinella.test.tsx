@@ -51,6 +51,17 @@ test('every frame of every mood is fourteen pixels wide, in pairs of rows', asyn
   expect(shapes.every(Boolean)).toBe(true)
 })
 
+test('the compact one is ten pixels wide and never more than six lines tall', async () => {
+  const moods: Mood[] = ['idle', 'working', 'happy', 'worried', 'stunned', 'sleeping']
+  const shapes = moods.flatMap(mood =>
+    [0, 1, 11].flatMap(tick => [1, 2, 5].map(level => spriteOf(mood, tick, level, 'compact')))
+  )
+
+  expect(shapes.every(rows => rows.every(row => row.length === 10))).toBe(true)
+  expect(Math.max(...shapes.map(rows => cellsOf(rows).length))).toBe(6)
+  expect(spriteOf('idle', 0, 1, 'compact')).not.toEqual(spriteOf('idle', 11, 1, 'compact'))
+})
+
 test('his hat grows a pixel per level', async () => {
   expect([1, 2, 3, 5].map(level => spriteOf('idle', 0, level).length)).toEqual([16, 18, 18, 20])
 })

@@ -129,16 +129,63 @@ const TIP: readonly string[] = [
   '...........W..'
 ]
 
-// His pixels in a mood at a beat of the animation, his hat a pixel taller for every level past
-// the first, and an even number of rows, so they pair up into character cells.
-export function spriteOf(mood: Mood, tick: number, level: number): string[] {
-  const frame = FRAMES[mood][tick % 2 === 0 ? 0 : 1]
-  const blink = mood === 'idle' && tick % 12 === 11 ? BLINK : {}
-  const body = IDLE.map((row, i) => blink[i] ?? frame[i] ?? row)
-  const grown = Math.min(TIP.length, Math.max(0, level - 1))
-  const rows = [...TIP.slice(TIP.length - grown), ...body]
+// Pulcinella small, ten pixels wide and ten tall, for the terminal, where every two pixel rows
+// take a whole line: the same costume in five lines.
+const COMPACT: readonly string[] = [
+  '.......WW.',
+  '.....WWWW.',
+  '...WWWWW..',
+  '.wWWWWWWw.',
+  'KKKKKKKKKK',
+  'KWKKKKKWKK',
+  '.SSSKKSSS.',
+  '.SPSRRSPS.',
+  '..WWWWWW..',
+  '.WWWKKWWW.'
+]
 
-  return rows.length % 2 === 0 ? rows : ['.'.repeat(SPRITE_WIDTH), ...rows]
+const COMPACT_FRAMES: Record<Mood, readonly [Edits, Edits]> = {
+  idle: [{}, {}],
+  working: [
+    { 6: '.SSSKKSSSY' },
+    { 0: '........WW', 1: '......WWWW', 2: '....WWWWW.', 7: '.SPSRRSPSY' }
+  ],
+  happy: [
+    { 5: 'KKWKKKWKKK', 7: '.SRRRRRRS.' },
+    { 0: 'Y......WW.', 5: 'KKWKKKWKKK', 7: '.SRRRRRRS.' }
+  ],
+  worried: [{ 7: '.SSSRRSSS.' }, { 5: 'KWKKKKKWKC', 7: '.SSSRRSSS.' }],
+  stunned: [
+    { 5: 'KWWKKKWWKK', 7: '.SPRRRRPS.' },
+    { 0: 'Y......WW.', 1: 'Y....WWWW.', 5: 'KWWKKKWWKK', 7: '.SPRRRRPS.' }
+  ],
+  sleeping: [
+    { 0: '.......WWY', 5: 'KKKKKKKKKK', 7: '.SSSRSSSS.' },
+    { 0: '.......WWY', 1: '.....WWWWY', 5: 'KKKKKKKKKK', 7: '.SSSRSSSS.' }
+  ]
+}
+
+const COMPACT_BLINK: Edits = { 5: 'KKKKKKKKKK' }
+
+// Its hat grows by two pixels at most, so he never stands taller than the band beside him.
+const COMPACT_TIP: readonly string[] = ['.........W', '........W.']
+
+export type Size = 'full' | 'compact'
+
+// His pixels in a mood at a beat of the animation, his hat a pixel taller for every level past
+// the first, and an even number of rows, so they pair up into character cells. `compact` is the
+// small one the terminal draws.
+export function spriteOf(mood: Mood, tick: number, level: number, size: Size = 'full'): string[] {
+  const isCompact = size === 'compact'
+  const frame = (isCompact ? COMPACT_FRAMES : FRAMES)[mood][tick % 2 === 0 ? 0 : 1]
+  const blink = mood === 'idle' && tick % 12 === 11 ? (isCompact ? COMPACT_BLINK : BLINK) : {}
+  const body = (isCompact ? COMPACT : IDLE).map((row, i) => blink[i] ?? frame[i] ?? row)
+  const tip = isCompact ? COMPACT_TIP : TIP
+  const grown = Math.min(tip.length, Math.max(0, level - 1))
+  const rows = [...tip.slice(tip.length - grown), ...body]
+  const width = body[0]?.length ?? SPRITE_WIDTH
+
+  return rows.length % 2 === 0 ? rows : ['.'.repeat(width), ...rows]
 }
 
 // The card behind him on a graphical surface, so the black mask stands out on a dark theme.
@@ -226,7 +273,7 @@ function cellRow(top: string, bottom: string): Cell[] {
 // Pixel rows as character rows, two pixel rows to each.
 export function cellsOf(pixels: readonly string[]): Cell[][] {
   return Array.from({ length: Math.ceil(pixels.length / 2) }, (_, i) =>
-    cellRow(pixels[i * 2] ?? '', pixels[i * 2 + 1] ?? '.'.repeat(SPRITE_WIDTH))
+    cellRow(pixels[i * 2] ?? '', pixels[i * 2 + 1] ?? '.'.repeat(pixels[i * 2]?.length ?? 0))
   )
 }
 

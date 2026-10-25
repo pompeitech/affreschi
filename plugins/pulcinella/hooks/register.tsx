@@ -254,9 +254,14 @@ export const register: Register = on => {
     const { mood, quote } = await read($, face)
     const level = levelOf(await read($, tokens))
     const m = await read($, map)
-    const pixels = spriteOf(mood, await read($, tick), level)
     const elements = $.ui.resolve(e)
     const Svg = e.surface !== 'terminal' && 'Svg' in elements ? elements.Svg : undefined
+    const pixels = spriteOf(
+      mood,
+      await read($, tick),
+      level,
+      Svg === undefined ? 'compact' : 'full'
+    )
 
     // A graphical surface draws him as an image, pixel for pixel. The terminal draws two pixels
     // to a character, the glyph's color above and its background below, monospaced so the
