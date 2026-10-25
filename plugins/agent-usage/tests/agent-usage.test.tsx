@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
-
+import { ROLE_NAME, roleOf, SPRITE_WIDTH, spriteOf } from '../hooks/cast'
 import {
   addUsage,
   completedAgentOf,
@@ -9,14 +9,13 @@ import {
   formatDuration,
   formatTokens,
   MAIN,
-  mascotOf,
   mergeKnown,
   shortModel,
   sorted,
   totalOf,
   upsert
 } from '../hooks/register'
-import type { AgentUsage } from '../types'
+import type { AgentUsage, Role } from '../types'
 
 const PANE_PROPS = {
   title: 'Agent usage',
@@ -107,13 +106,64 @@ test('shortModel drops the claude- prefix and the date', async () => {
   expect(shortModel('claude-sonnet-5-20260601')).toBe('sonnet-5')
 })
 
-test('the mascot keeps its body and changes its eyes with the status', async () => {
-  const statuses: AgentUsage['status'][] = ['running', 'completed', 'failed', 'idle']
-  const working = mascotOf('running')
+test('roleOf casts an agent from its type, then from its name', async () => {
+  const cast = (type: string, label = '') => roleOf({ id: 'x', type, label }, MAIN)
 
-  expect(new Set(statuses.map(status => mascotOf(status)[0])).size).toBe(statuses.length)
-  expect(mascotOf('completed')[1]).toBe(working[1])
-  expect(mascotOf('waiting')).toEqual(working)
+  expect([
+    cast('Explore'),
+    cast('Plan'),
+    cast('code-reviewer'),
+    cast('security-reviewer'),
+    cast('qa-tester'),
+    cast('frontend-dev'),
+    cast('general-purpose'),
+    cast('general-purpose', 'Redesign the settings UI'),
+    roleOf({ id: MAIN, type: 'main', label: 'Main conversation' }, MAIN)
+  ]).toEqual([
+    'explorer',
+    'nerd',
+    'reviewer',
+    'guard',
+    'tester',
+    'artist',
+    'handyman',
+    'artist',
+    'pulcinella'
+  ])
+})
+
+test('every character is four rows of the same width, in every status', async () => {
+  const roles: Role[] = [
+    'pulcinella',
+    'artist',
+    'nerd',
+    'explorer',
+    'reviewer',
+    'guard',
+    'tester',
+    'handyman'
+  ]
+  const statuses: AgentUsage['status'][] = ['running', 'completed', 'failed', 'idle']
+  const widths = roles.flatMap(role =>
+    statuses.map(status =>
+      spriteOf(role, status).map(row => row.reduce((sum, run) => sum + [...run.text].length, 0))
+    )
+  )
+
+  expect(new Set(widths.map(rows => rows.join(',')))).toEqual(
+    new Set([[SPRITE_WIDTH, SPRITE_WIDTH, SPRITE_WIDTH, SPRITE_WIDTH].join(',')])
+  )
+})
+
+test('the eyes follow the status', async () => {
+  const faces = (['running', 'completed', 'failed', 'idle'] as const).map(
+    status =>
+      spriteOf('explorer', status)[1]
+        ?.map(run => run.text)
+        .join('') ?? ''
+  )
+
+  expect(new Set(faces).size).toBe(4)
 })
 
 test('completedAgentOf reads a completed Agent call and ignores anything else', async () => {
@@ -140,6 +190,7 @@ test('completedAgentOf reads a completed Agent call and ignores anything else', 
 async function seed($: Engine, on: On, agentResult: unknown = 'ok'): Promise<void> {
   on('session.start', async (_$, e) => e)
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
+  on('prompt.submit', async (_$, e) => e)
   on('agent.spawn', async () => ({ model: 'claude-sonnet-5', agentId: 'a1' }))
   on('tool.call', async (_$, e) => ({ result: e.tool === 'Agent' ? agentResult : 'ok' }))
   // biome-ignore lint/correctness/useYield: the engine's stand-in answers the step without streaming
@@ -200,7 +251,9 @@ test('the pane shows each agent with its mascot, model, share and counts', async
       props: PANE_PROPS
     })
     expect(await ui.find({ type: 'Text', text: /30k tokens · 3 requests/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: mascotOf('running')[0] })).toBeDefined()
+    // The Explore agent plays the explorer: a lamp on the head, eyes open while it works.
+    expect(await ui.find({ type: 'Text', text: /◉▄▄▄/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /▐▛███▜▌/ })).toBeDefined()
     expect((await ui.find({ key: `agent-${MAIN}` }))?.text).toBe('Main conversation')
     expect((await ui.find({ key: 'agent-a1' }))?.text).toBe('Find config loading')
     expect(await ui.find({ type: 'Text', text: 'sonnet-5 · Explore' })).toBeDefined()
@@ -250,5 +303,55 @@ test('a completed Agent call marks its agent done and records how long it ran', 
   expect(await ui.find({ type: 'Text', text: /done/ })).toBeDefined()
   await ui.press({ key: 'agent-a1' })
   expect(await ui.find({ type: 'Text', text: '1m 4s' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a finished agent moves to the archive at the next prompt, grouped by role', async ($, on) => {
+  await seed($, on, { status: 'completed', agentId: 'a1', totalDurationMs: 64_000 })
+  await $.tool.call({
+    tool: 'Agent',
+    tool_use_id: 'u1',
+    description: 'Find config loading',
+    prompt: 'Find where config is read.',
+    subagent_type: 'Explore'
+  })
+  await $.prompt.submit({ text: 'next', wait: false, origin: { kind: 'composer' } })
+
+  const ui = await $.ui.mount({
+    plugin: 'agent-usage',
+    surface: 'desktop',
+    component: 'Pane',
+    requestId: 'agent-usage',
+    props: PANE_PROPS
+  })
+  expect(await ui.find({ key: 'agent-a1' })).toBeUndefined()
+  expect((await ui.find({ key: 'group-explorer' }))?.text).toBe(`${ROLE_NAME.explorer[0]} ×1`)
+
+  await ui.press({ key: 'group-explorer' })
+  expect(await ui.find({ type: 'Text', text: /Find config loading/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('clearing the archive takes its agents off the list and keeps them in the totals', async ($, on) => {
+  await seed($, on, { status: 'completed', agentId: 'a1', totalDurationMs: 64_000 })
+  await $.tool.call({
+    tool: 'Agent',
+    tool_use_id: 'u1',
+    description: 'Find config loading',
+    prompt: 'Find where config is read.',
+    subagent_type: 'Explore'
+  })
+  await $.prompt.submit({ text: 'next', wait: false, origin: { kind: 'composer' } })
+
+  const ui = await $.ui.mount({
+    plugin: 'agent-usage',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'agent-usage',
+    props: PANE_PROPS
+  })
+  await ui.press({ key: 'clear' })
+  expect(await ui.find({ key: 'group-explorer' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /30k tokens · 3 requests/ })).toBeDefined()
   await ui.unmount()
 })

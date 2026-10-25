@@ -1,8 +1,9 @@
 import type { AgentInfo, EngineInterface, ModelUsage, Register } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 
-import type { AgentUsage } from '../types'
-import { SEQUENCE, VESUVIUS } from './palette'
+import type { AgentUsage, Cleared, Role } from '../types'
+import { ROLE_COLOR, ROLE_NAME, roleOf, SPRITE_WIDTH, type Sprite, spriteOf } from './cast'
+import { VESUVIUS } from './palette'
 
 const PANE = 'agent-usage'
 export const MAIN = 'main'
@@ -10,13 +11,21 @@ export const MAIN = 'main'
 const BADGE_TEXT = '#1A1A1A'
 // The empty part of a bar.
 const TRACK = '#3A3A3A'
+// Pulcinella's mask, and the white of his eyes and of every costume's props.
+const MASK = '#1A1A1A'
+const WHITE = '#F2EFE9'
 
 const agents = atom({ plugin: 'agent-usage', key: 'agents' } as const, [])
 const expanded = atom({ plugin: 'agent-usage', key: 'expanded' } as const, null)
 const costUsd = atom({ plugin: 'agent-usage', key: 'costUsd' } as const, null)
+const turn = atom({ plugin: 'agent-usage', key: 'turn' } as const, 0)
+const openGroup = atom({ plugin: 'agent-usage', key: 'openGroup' } as const, null)
+const NOTHING_CLEARED: Cleared = { tokens: 0, steps: 0 }
+const cleared = atom({ plugin: 'agent-usage', key: 'cleared' } as const, NOTHING_CLEARED)
 
-export function emptyUsage(id: string, label: string, type: string): AgentUsage {
+export function emptyUsage(id: string, label: string, type: string, lastTurn = 0): AgentUsage {
   return {
+    lastTurn,
     id,
     label,
     type,
@@ -92,11 +101,11 @@ export function addUsage(a: AgentUsage, usage: ModelUsage & { model?: string }):
   }
 }
 
-// The main conversation first, then the subagents, biggest first.
+// The main conversation first, then the agents at work, then the rest, biggest first.
 export function sorted(list: readonly AgentUsage[]): AgentUsage[] {
-  return [...list].sort((a, b) =>
-    a.id === MAIN ? -1 : b.id === MAIN ? 1 : totalOf(b) - totalOf(a)
-  )
+  const rank = (a: AgentUsage) => (a.id === MAIN ? 0 : isBusy(a) ? 1 : 2)
+
+  return list.toSorted((a, b) => rank(a) - rank(b) || totalOf(b) - totalOf(a))
 }
 
 const STATUS_GLYPH: Record<AgentUsage['status'], string> = {
@@ -107,26 +116,6 @@ const STATUS_GLYPH: Record<AgentUsage['status'], string> = {
   completed: '✓',
   failed: '✗',
   killed: '✗'
-}
-
-// Each agent's mascot, three rows of block glyphs: its eyes say what it is doing.
-const BODY = '▝▜█████▛▘'
-const FEET = '  ▘▘ ▝▝  '
-const FEET_RESTING = '  ▝▝ ▘▘  '
-
-// Every status names its mascot, so a status the engine adds fails to compile until it has one.
-const MASCOTS: Record<AgentUsage['status'], readonly [string, string, string]> = {
-  running: [' ▐▛███▜▌ ', BODY, FEET],
-  waiting: [' ▐▛███▜▌ ', BODY, FEET],
-  completed: [' ▐▛▀█▀▜▌ ', BODY, FEET],
-  failed: [' ▐▛▚█▞▜▌ ', BODY, FEET_RESTING],
-  killed: [' ▐▛▚█▞▜▌ ', BODY, FEET_RESTING],
-  pending: [' ▐▛▄█▄▜▌ ', BODY, FEET_RESTING],
-  idle: [' ▐▛▄█▄▜▌ ', BODY, FEET_RESTING]
-}
-
-export function mascotOf(status: AgentUsage['status']): readonly [string, string, string] {
-  return MASCOTS[status]
 }
 
 const STATUS_LABEL: Record<AgentUsage['status'], string> = {
@@ -174,9 +163,9 @@ let polls = 0
 // How often the pane reads the agents again, so a background agent's progress shows live.
 const POLL_MS = 2000
 
-const mainRow = () => ({
+const mainRow = (): AgentUsage => ({
   ...emptyUsage(MAIN, 'Main conversation', 'main'),
-  status: 'idle' as const
+  status: 'idle'
 })
 
 // A failure the mod lives through (a read it retries on the next beat, a band beneath that did
@@ -186,24 +175,85 @@ function logFailure($: EngineInterface, what: string, error: unknown): void {
   $.ui.log(`agent-usage: ${what} failed: ${reason}`, { to: 'debug' })
 }
 
-// Folds the engine's list of agents into the rows: each known row takes its status, and an agent
-// the hooks never saw (a teammate, one spawned before the mod loaded) gets a row of its own.
-export function mergeKnown(list: readonly AgentUsage[], known: readonly AgentInfo[]): AgentUsage[] {
+// Folds the engine's list of agents into the rows: each known row takes its status (a change of
+// status counts as activity in `currentTurn`), and an agent the hooks never saw (a teammate, one
+// spawned before the mod loaded) gets a row of its own, on stage only while it is busy.
+export function mergeKnown(
+  list: readonly AgentUsage[],
+  known: readonly AgentInfo[],
+  currentTurn = 0
+): AgentUsage[] {
   const merged = list.map(a => {
     const info = known.find(k => k.id === a.id)
 
-    return info === undefined
-      ? a
-      : { ...a, status: info.status, label: a.label || info.description, type: a.type || info.type }
+    if (info === undefined) {
+      return a
+    }
+
+    return {
+      ...a,
+      status: info.status,
+      label: a.label || info.description,
+      type: a.type || info.type,
+      lastTurn: info.status === a.status ? a.lastTurn : currentTurn
+    }
   })
   const unseen = known
     .filter(k => !list.some(a => a.id === k.id))
     .map(k => ({
-      ...emptyUsage(k.id, k.description || k.teammateId || '', k.type),
+      ...emptyUsage(k.id, k.description || k.teammateId || '', k.type, -1),
       status: k.status
     }))
 
   return [...merged, ...unseen]
+}
+
+// On stage: the main conversation, every agent at work, and the ones that did something this turn.
+// The rest wait in the archive.
+export function isOnStage(a: AgentUsage, currentTurn: number): boolean {
+  return a.id === MAIN || isBusy(a) || a.lastTurn >= currentTurn
+}
+
+export type Group = {
+  role: Role
+  agents: AgentUsage[]
+  tokens: number
+  failed: number
+  types: string[]
+}
+
+// The archive, one group per role, the biggest first.
+export function archiveOf(list: readonly AgentUsage[], currentTurn: number): Group[] {
+  const groups = new Map<Role, AgentUsage[]>()
+
+  for (const a of list) {
+    if (!isOnStage(a, currentTurn)) {
+      const role = roleOf(a, MAIN)
+      groups.set(role, [...(groups.get(role) ?? []), a])
+    }
+  }
+
+  return [...groups]
+    .map(([role, agents]) => ({
+      role,
+      agents,
+      tokens: agents.reduce((sum, a) => sum + totalOf(a), 0),
+      failed: agents.filter(a => a.status === 'failed' || a.status === 'killed').length,
+      types: [...new Set(agents.map(a => a.type).filter(t => t !== ''))]
+    }))
+    .toSorted((x, y) => y.tokens - x.tokens)
+}
+
+// Takes the archive off the list, keeping what it consumed in the totals.
+async function clearArchive($: EngineInterface): Promise<void> {
+  const now = await read($, turn)
+  const list = await read($, agents)
+  const archived = list.filter(a => !isOnStage(a, now))
+  const tokens = archived.reduce((sum, a) => sum + totalOf(a), 0)
+  const steps = archived.reduce((sum, a) => sum + a.steps, 0)
+  await update($, cleared, c => ({ tokens: c.tokens + tokens, steps: c.steps + steps }))
+  await update($, agents, l => l.filter(a => isOnStage(a, now)))
+  await update($, openGroup, () => null)
 }
 
 function isBusy(a: AgentUsage): boolean {
@@ -224,7 +274,7 @@ async function refresh($: EngineInterface): Promise<void> {
     return undefined
   })
   const list = await read($, agents)
-  const next = mergeKnown(list, known)
+  const next = mergeKnown(list, known, await read($, turn))
 
   if (JSON.stringify(next) !== JSON.stringify(list)) {
     await update($, agents, () => next)
@@ -288,12 +338,20 @@ export const register: Register = on => {
     return {}
   })
 
+  // Every prompt opens a turn: what finished in the last one moves to the archive.
+  on('prompt.submit', async ($, e, next) => {
+    await update($, turn, t => t + 1)
+
+    return next(e)
+  })
+
   // A subagent starts: its row gets the task's description and type.
   on('agent.spawn', async ($, e, next) => {
     const result = await next(e)
 
     if (result.agentId !== undefined) {
       const id = result.agentId
+      const now = await read($, turn)
       await update($, agents, list =>
         upsert(
           list,
@@ -303,9 +361,10 @@ export const register: Register = on => {
             label: e.description,
             type: e.subagentType,
             model: result.model,
-            status: 'running'
+            status: 'running',
+            lastTurn: now
           }),
-          () => emptyUsage(id, e.description, e.subagentType)
+          () => emptyUsage(id, e.description, e.subagentType, now)
         )
       )
       await showStatus($)
@@ -321,12 +380,13 @@ export const register: Register = on => {
 
     if (usage !== null) {
       const id = e.agentId ?? MAIN
+      const now = await read($, turn)
       await update($, agents, list =>
         upsert(
           list,
           id,
-          a => addUsage(a, usage),
-          () => (id === MAIN ? mainRow() : emptyUsage(id, '', ''))
+          a => ({ ...addUsage(a, usage), lastTurn: now }),
+          () => (id === MAIN ? mainRow() : emptyUsage(id, '', '', now))
         )
       )
       await showStatus($)
@@ -338,12 +398,13 @@ export const register: Register = on => {
   // Every tool call counts for the loop it runs in.
   on('tool.call', async ($, e, next) => {
     const id = e.agentId ?? MAIN
+    const now = await read($, turn)
     await update($, agents, list =>
       upsert(
         list,
         id,
-        a => ({ ...a, tools: a.tools + 1 }),
-        () => (id === MAIN ? mainRow() : emptyUsage(id, '', ''))
+        a => ({ ...a, tools: a.tools + 1, lastTurn: now }),
+        () => (id === MAIN ? mainRow() : emptyUsage(id, '', '', now))
       )
     )
 
@@ -357,6 +418,7 @@ export const register: Register = on => {
 
     if (result !== undefined) {
       const id = result.agentId
+      const now = await read($, turn)
       const finished = (await read($, agents)).find(a => a.id === id)
       await update($, agents, list =>
         list.map(a =>
@@ -364,7 +426,8 @@ export const register: Register = on => {
             ? {
                 ...a,
                 status: 'completed' as const,
-                durationMs: result.totalDurationMs ?? a.durationMs
+                durationMs: result.totalDurationMs ?? a.durationMs,
+                lastTurn: now
               }
             : a
         )
@@ -395,14 +458,20 @@ export const register: Register = on => {
 
     // A failure while drawing shows in the pane itself, never as an empty pane.
     try {
-      const list = sorted(await read($, agents))
+      const list = await read($, agents)
+      const now = await read($, turn)
       const open = await read($, expanded)
+      const group = await read($, openGroup)
       const cost = await read($, costUsd)
-      const grand = list.reduce((sum, a) => sum + totalOf(a), 0)
-      const subagents = list.filter(a => a.id !== MAIN)
-      const running = subagents.filter(a => a.status === 'running' || a.status === 'waiting')
+      const gone = await read($, cleared)
+      const grand = list.reduce((sum, a) => sum + totalOf(a), gone.tokens)
+      const requests = list.reduce((sum, a) => sum + a.steps, gone.steps)
+      const stage = sorted(list.filter(a => isOnStage(a, now)))
+      const archive = archiveOf(list, now)
+      const running = list.filter(a => a.id !== MAIN && isBusy(a))
+      const shareOf = (tokens: number) => (grand > 0 ? Math.round((tokens / grand) * 100) : 0)
 
-      // A number under its name: the cards are made of these.
+      // A number under its name: the details are made of these.
       const tile = (label: string, value: string, color: string = 'text') => (
         <Box flexDirection="column">
           <Text color={VESUVIUS.ash}>{label}</Text>
@@ -412,12 +481,42 @@ export const register: Register = on => {
         </Box>
       )
 
-      const requests = list.reduce((sum, a) => sum + a.steps, 0)
+      // A character, monospaced so its glyphs line up where the surface's font is proportional.
+      const figure = (sprite: Sprite, color: string) => (
+        <Box flexDirection="column" flexShrink={0}>
+          {sprite.map(row => (
+            <Text mono color={color}>
+              {row.map(run =>
+                run.tone === 'mask' ? (
+                  <Text backgroundColor={MASK} color={WHITE}>
+                    {run.text}
+                  </Text>
+                ) : run.tone === 'prop' ? (
+                  <Text color={WHITE}>{run.text}</Text>
+                ) : (
+                  run.text
+                )
+              )}
+            </Text>
+          ))}
+        </Box>
+      )
+
+      // Bars are boxes sized in percent, never counted characters: a desktop pane draws text in
+      // a proportional font, where a row of block glyphs overflows.
+      const bar = (percent: number, color: string) => (
+        <Box flexDirection="row" height={1} backgroundColor={TRACK}>
+          <Box width={`${percent}%`} height={1} backgroundColor={color}>
+            <Text> </Text>
+          </Box>
+        </Box>
+      )
+
       const header = (
         <Box flexDirection="row" justifyContent="space-between">
           <Text>
             <Text color={VESUVIUS.lava}>◆</Text> <Text bold>Agent usage</Text>
-            {list.length > 0 && (
+            {grand > 0 && (
               <Text color={VESUVIUS.ash}>
                 {' '}
                 · {formatTokens(grand)} tokens
@@ -429,7 +528,7 @@ export const register: Register = on => {
           </Text>
           {running.length > 0 ? (
             <Text backgroundColor={VESUVIUS.magma} color={BADGE_TEXT} bold>
-              {` ${running.length} RUNNING `}
+              {` ${running.length} AL LAVORO `}
             </Text>
           ) : (
             <Text color={VESUVIUS.ash}>idle</Text>
@@ -446,83 +545,130 @@ export const register: Register = on => {
         )
       }
 
+      const actor = (a: AgentUsage) => {
+        const role = roleOf(a, MAIN)
+        const color = ROLE_COLOR[role]
+        const total = totalOf(a)
+        const share = shareOf(total)
+        const model = a.model ? shortModel(a.model) : ''
+        const when = a.status === 'completed' && a.id !== MAIN ? ' · this turn' : ''
+
+        return (
+          <Box flexDirection="column">
+            <Box flexDirection="row" columnGap={2}>
+              {figure(spriteOf(role, a.status), color)}
+              <Box flexDirection="column" flexGrow={1} justifyContent="flex-end">
+                <Box flexDirection="row" justifyContent="space-between">
+                  {/* A Button takes a label only: the model sits beside it. */}
+                  <Box flexDirection="row" columnGap={1}>
+                    <Button
+                      key={`agent-${a.id}`}
+                      plain
+                      label={a.label || a.type || a.id}
+                      onPress={() => update($, expanded, x => (x === a.id ? null : a.id))}
+                    />
+                    <Text color={VESUVIUS.ash} wrap="truncate-end">
+                      {model}
+                      {a.type !== 'main' && a.type !== '' ? ` · ${a.type}` : ''}
+                    </Text>
+                  </Box>
+                  <Text color={STATUS_COLOR[a.status]}>
+                    {`${STATUS_GLYPH[a.status]} ${STATUS_LABEL[a.status]}${when}`}
+                  </Text>
+                </Box>
+                {bar(total > 0 ? Math.max(1, share) : 0, color)}
+                <Box flexDirection="row" justifyContent="space-between" columnGap={2}>
+                  <Text>
+                    <Text bold>{formatTokens(total)}</Text>{' '}
+                    <Text color={VESUVIUS.ash}>{`${share}%`}</Text>
+                  </Text>
+                  <Text color={VESUVIUS.ash} wrap="truncate-end">
+                    {a.steps} {a.steps === 1 ? 'request' : 'requests'} · {a.tools} tool{' '}
+                    {a.tools === 1 ? 'call' : 'calls'}
+                  </Text>
+                </Box>
+              </Box>
+            </Box>
+            {a.id === open && (
+              <Box flexDirection="row" columnGap={4} marginTop={1} marginLeft={SPRITE_WIDTH + 2}>
+                {tile('INPUT', formatTokens(a.input), VESUVIUS.gulf)}
+                {tile('OUTPUT', formatTokens(a.output), VESUVIUS.vineyard)}
+                {tile('CACHE READ', formatTokens(a.cacheRead), VESUVIUS.sulfur)}
+                {tile('CACHE WRITE', formatTokens(a.cacheWrite), VESUVIUS.tuff)}
+                {tile('RAN', formatDuration(a.durationMs))}
+              </Box>
+            )}
+          </Box>
+        )
+      }
+
+      const shelf = (g: Group) => {
+        const color = ROLE_COLOR[g.role]
+        const [one, many] = ROLE_NAME[g.role]
+        const isOpen = g.role === group
+
+        return (
+          <Box flexDirection="column">
+            <Box flexDirection="row" columnGap={2} alignItems="center">
+              {figure(spriteOf(g.role, 'completed').slice(0, 2), color)}
+              <Box flexDirection="row" flexGrow={1} justifyContent="space-between" columnGap={2}>
+                <Box flexDirection="row" columnGap={1}>
+                  <Button
+                    key={`group-${g.role}`}
+                    plain
+                    label={`${g.agents.length === 1 ? one : many} ×${g.agents.length}`}
+                    onPress={() => update($, openGroup, x => (x === g.role ? null : g.role))}
+                  />
+                  <Text color={VESUVIUS.ash} wrap="truncate-end">
+                    {g.types.join(', ')}
+                    {g.failed > 0 ? ' · ' : ''}
+                    {g.failed > 0 && <Text color={VESUVIUS.lava}>{g.failed} failed</Text>}
+                  </Text>
+                </Box>
+                <Text>
+                  <Text bold>{formatTokens(g.tokens)}</Text>{' '}
+                  <Text color={VESUVIUS.ash}>{`${shareOf(g.tokens)}% ${isOpen ? '▾' : '▸'}`}</Text>
+                </Text>
+              </Box>
+            </Box>
+            {isOpen &&
+              g.agents.map(a => (
+                <Box
+                  flexDirection="row"
+                  justifyContent="space-between"
+                  marginLeft={SPRITE_WIDTH + 2}
+                >
+                  <Text wrap="truncate-end">
+                    <Text color={STATUS_COLOR[a.status]}>{STATUS_GLYPH[a.status]}</Text>{' '}
+                    {a.label || a.type || a.id}
+                  </Text>
+                  <Text color={VESUVIUS.ash}>
+                    {formatTokens(totalOf(a))} · {formatDuration(a.durationMs)}
+                  </Text>
+                </Box>
+              ))}
+          </Box>
+        )
+      }
+
       return (
         <Box flexDirection="column" rowGap={1}>
           {header}
+          <Text color={VESUVIUS.ash}>IN SCENA</Text>
           <Box flexDirection="column" rowGap={1}>
-            {list.map((a, i) => {
-              const total = totalOf(a)
-              const share = grand > 0 ? total / grand : 0
-              const percent = total > 0 ? Math.max(1, Math.round(share * 100)) : 0
-              const color = SEQUENCE[i % SEQUENCE.length] ?? VESUVIUS.lava
-              const isOpen = a.id === open
-              const model = a.model ? shortModel(a.model) : ''
-
-              return (
-                <Box flexDirection="column">
-                  <Box flexDirection="row" columnGap={2}>
-                    {/* Monospaced, so the glyphs line up where the surface's font is proportional. */}
-                    <Box flexDirection="column" flexShrink={0}>
-                      {mascotOf(a.status).map(line => (
-                        <Text color={color} mono>
-                          {line}
-                        </Text>
-                      ))}
-                    </Box>
-                    <Box flexDirection="column" flexGrow={1}>
-                      <Box flexDirection="row" justifyContent="space-between">
-                        {/* A Button takes a label only: the model sits beside it. */}
-                        <Box flexDirection="row" columnGap={1}>
-                          <Button
-                            key={`agent-${a.id}`}
-                            plain
-                            label={a.label || a.type || a.id}
-                            onPress={() => update($, expanded, x => (x === a.id ? null : a.id))}
-                          />
-                          <Text color={VESUVIUS.ash} wrap="truncate-end">
-                            {model}
-                            {a.type !== 'main' && a.type !== '' ? ` · ${a.type}` : ''}
-                          </Text>
-                        </Box>
-                        <Text
-                          color={STATUS_COLOR[a.status]}
-                        >{`${STATUS_GLYPH[a.status]} ${STATUS_LABEL[a.status]}`}</Text>
-                      </Box>
-                      {/* Bars are boxes sized in percent, never counted characters: a desktop pane draws
-                      text in a proportional font, where a row of block glyphs overflows. */}
-                      <Box flexDirection="row" height={1} backgroundColor={TRACK}>
-                        <Box width={`${percent}%`} height={1} backgroundColor={color}>
-                          <Text> </Text>
-                        </Box>
-                      </Box>
-                      <Box flexDirection="row" justifyContent="space-between" columnGap={2}>
-                        <Text>
-                          <Text bold>{formatTokens(total)}</Text>{' '}
-                          <Text color={VESUVIUS.ash}>{`${Math.round(share * 100)}%`}</Text>
-                        </Text>
-                        <Text color={VESUVIUS.ash} wrap="truncate-end">
-                          {a.steps} {a.steps === 1 ? 'request' : 'requests'} · {a.tools} tool{' '}
-                          {a.tools === 1 ? 'call' : 'calls'}
-                        </Text>
-                      </Box>
-                    </Box>
-                  </Box>
-                  {isOpen && (
-                    <Box flexDirection="row" columnGap={4} marginTop={1} marginLeft={11}>
-                      {tile('INPUT', formatTokens(a.input), VESUVIUS.gulf)}
-                      {tile('OUTPUT', formatTokens(a.output), VESUVIUS.vineyard)}
-                      {tile('CACHE READ', formatTokens(a.cacheRead), VESUVIUS.sulfur)}
-                      {tile('CACHE WRITE', formatTokens(a.cacheWrite), VESUVIUS.tuff)}
-                      {tile('RAN', formatDuration(a.durationMs))}
-                    </Box>
-                  )}
-                </Box>
-              )
-            })}
+            {stage.map(actor)}
           </Box>
+          {archive.length > 0 && (
+            <Box flexDirection="column">
+              <Text color={VESUVIUS.ash}>ARCHIVIO · finished in earlier turns</Text>
+              {archive.map(shelf)}
+            </Box>
+          )}
           <Box flexDirection="row" justifyContent="space-between">
-            <Text color={VESUVIUS.ash}>click a name for details · /agent-usage to refresh</Text>
-            <Button key="reset" plain label="reset" onPress={() => update($, agents, () => [])} />
+            <Text color={VESUVIUS.ash}>click a name for details · ▸ opens a group</Text>
+            {archive.length > 0 && (
+              <Button key="clear" plain label="svuota archivio" onPress={() => clearArchive($)} />
+            )}
           </Box>
         </Box>
       )

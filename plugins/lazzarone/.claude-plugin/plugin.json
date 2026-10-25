@@ -1,0 +1,14 @@
+{
+  "name": "lazzarone",
+  "version": "0.1.0",
+  "description": "Lazzarone: when Claude has been waiting on you for a few minutes (a permission, a question, a long turn just finished), a system notification calls you back",
+  "author": { "name": "Davide D'Antonio" },
+  "userConfig": {
+    "minutes": {
+      "type": "number",
+      "title": "Minutes before calling you",
+      "description": "How long Claude waits on you before Lazzarone sends a notification",
+      "default": 3
+    }
+  }
+}

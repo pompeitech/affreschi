@@ -1,0 +1,7 @@
+{
+  "name": "maschere",
+  "version": "0.1.0",
+  "description": "Pick a mask from the Commedia dell'arte and Claude answers in its voice: Pulcinella ironic, Arlecchino terse, Balanzone thorough; the work stays the same",
+  "author": { "name": "Davide D'Antonio" },
+  "types": "./types/index.d.ts"
+}

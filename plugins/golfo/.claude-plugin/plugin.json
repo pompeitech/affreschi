@@ -1,0 +1,15 @@
+{
+  "name": "golfo",
+  "version": "0.1.0",
+  "description": "Il Golfo: what Claude Code costs you day by day, across sessions and projects, with a weekly budget that warns you at 80% and 100%",
+  "author": { "name": "Davide D'Antonio" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "weeklyBudget": {
+      "type": "number",
+      "title": "Weekly budget (USD)",
+      "description": "Il Golfo warns you at 80% and 100% of it; 0 means no budget",
+      "default": 0
+    }
+  }
+}
