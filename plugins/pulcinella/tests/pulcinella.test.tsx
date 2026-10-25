@@ -11,7 +11,8 @@ import {
   QUOTES,
   quoteFor,
   SPRITE_WIDTH,
-  spriteOf
+  spriteOf,
+  svgOf
 } from '../hooks/mascot'
 import type { Mood } from '../types'
 
@@ -76,6 +77,23 @@ test('cellsOf puts two pixels in each character, joining cells of the same color
   ])
   expect(cellsOf(['S.', 'W.'])).toEqual([
     [{ text: '▀', color: PIXEL_COLOR.S, background: PIXEL_COLOR.W }, { text: ' ' }]
+  ])
+})
+
+test('svgOf draws each run of one color as one rectangle, on a card', async () => {
+  const svg = svgOf(['WWK.', '..SS'], 5)
+
+  expect(svg).toMatch(/^<svg [^>]*width="30" height="20"/)
+  expect(svg.match(/<rect /g)?.length).toBe(4)
+  expect(svg).toContain(`<rect x="5" y="5" width="10" height="5" fill="${PIXEL_COLOR.W}"/>`)
+})
+
+test('his hat curls up a pixel per level instead of growing straight', async () => {
+  expect(spriteOf('idle', 0, 5).slice(0, 4)).toEqual([
+    '.............W',
+    '............W.',
+    '............W.',
+    '...........W..'
   ])
 })
 
@@ -234,4 +252,37 @@ test('he stands beside a band a plugin beneath draws', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: 'context band' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'livello 1' })).toBeDefined()
   await ui.unmount()
+})
+
+test('a graphical surface draws him as an image, the terminal as characters', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('session.start', async (_$, e) => e)
+  on('command.register', async (_$, e) => ({ value: { command: e.name } }))
+  on('ui.log', async () => ({ value: undefined }))
+  on('ui.render', async ($, e) => {
+    const { Box } = $.ui.resolve(e)
+
+    return <Box />
+  })
+  await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
+
+  const desktop = await $.ui.mount({
+    plugin: 'pulcinella',
+    surface: 'desktop',
+    component: 'AbovePrompt',
+    props: BAND_PROPS
+  })
+  expect(JSON.stringify(await desktop.find({ type: 'Box' }))).toContain('"type":"Svg"')
+  await desktop.unmount()
+
+  const terminal = await $.ui.mount({
+    plugin: 'pulcinella',
+    surface: 'terminal',
+    component: 'AbovePrompt',
+    props: BAND_PROPS
+  })
+  expect(JSON.stringify(await terminal.find({ type: 'Box' }))).not.toContain('"type":"Svg"')
+  expect(JSON.stringify(await terminal.find({ type: 'Box' }))).toMatch(/[▀▄█]/)
+  await terminal.unmount()
 })

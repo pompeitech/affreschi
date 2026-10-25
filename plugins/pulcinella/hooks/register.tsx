@@ -15,10 +15,12 @@ import {
   toContextMap,
   turnsLeft
 } from './context'
-import { cellsOf, labelOf, levelOf, linesOf, quoteFor, spriteOf } from './mascot'
+import { cellsOf, labelOf, levelOf, linesOf, quoteFor, spriteOf, svgOf } from './mascot'
 import { VESUVIUS } from './palette'
 
 const PANE = 'context-map'
+// CSS pixels per sprite pixel where Pulcinella is drawn as an image.
+const SVG_PIXEL = 6
 // The animation's beat; away NAP_MS, he falls asleep; a cheer or a gasp fades after CALM_MS.
 const TICK_MS = 500
 const NAP_MS = 10 * 60 * 1000
@@ -252,27 +254,35 @@ export const register: Register = on => {
     const { mood, quote } = await read($, face)
     const level = levelOf(await read($, tokens))
     const m = await read($, map)
-    const rows = cellsOf(spriteOf(mood, await read($, tick), level))
+    const pixels = spriteOf(mood, await read($, tick), level)
+    const elements = $.ui.resolve(e)
+    const Svg = e.surface !== 'terminal' && 'Svg' in elements ? elements.Svg : undefined
 
-    // Each character carries two pixels, its glyph's color above and its background below;
-    // monospaced, so the columns line up where the surface's font is proportional.
-    const pulcinella = (
-      <Box flexDirection="column" flexShrink={0} alignSelf="center">
-        {rows.map(row => (
-          <Text mono>
-            {row.map(cell =>
-              cell.color === undefined ? (
-                cell.text
-              ) : (
-                <Text color={cell.color} backgroundColor={cell.background}>
-                  {cell.text}
-                </Text>
-              )
-            )}
-          </Text>
-        ))}
-      </Box>
-    )
+    // A graphical surface draws him as an image, pixel for pixel. The terminal draws two pixels
+    // to a character, the glyph's color above and its background below, monospaced so the
+    // columns line up.
+    const pulcinella =
+      Svg === undefined ? (
+        <Box flexDirection="column" flexShrink={0} alignSelf="center">
+          {cellsOf(pixels).map(row => (
+            <Text mono>
+              {row.map(cell =>
+                cell.color === undefined ? (
+                  cell.text
+                ) : (
+                  <Text color={cell.color} backgroundColor={cell.background}>
+                    {cell.text}
+                  </Text>
+                )
+              )}
+            </Text>
+          ))}
+        </Box>
+      ) : (
+        <Box flexShrink={0} alignSelf="center">
+          <Svg source={svgOf(pixels, SVG_PIXEL)} alt={`Pulcinella, ${mood}`} />
+        </Box>
+      )
     const says = (
       <Text color={VESUVIUS.tuff} italic wrap="truncate-end">
         “{quote}”

@@ -121,16 +121,65 @@ const FRAMES: Record<Mood, readonly [Edits, Edits]> = {
 // Closed eyes, for a blink now and then while he rests.
 const BLINK: Edits = { 7: '.KKKKKKKKKKKK.', 8: '.KKWWKKKKWWKK.' }
 
+// The tip the hat grows by, a pixel per level past the first, curling up and to the right.
+const TIP: readonly string[] = [
+  '.............W',
+  '............W.',
+  '............W.',
+  '...........W..'
+]
+
 // His pixels in a mood at a beat of the animation, his hat a pixel taller for every level past
 // the first, and an even number of rows, so they pair up into character cells.
 export function spriteOf(mood: Mood, tick: number, level: number): string[] {
   const frame = FRAMES[mood][tick % 2 === 0 ? 0 : 1]
   const blink = mood === 'idle' && tick % 12 === 11 ? BLINK : {}
   const body = IDLE.map((row, i) => blink[i] ?? frame[i] ?? row)
-  const taller = Array.from({ length: Math.max(0, level - 1) }, () => '..........WW..')
-  const rows = [...taller, ...body]
+  const grown = Math.min(TIP.length, Math.max(0, level - 1))
+  const rows = [...TIP.slice(TIP.length - grown), ...body]
 
   return rows.length % 2 === 0 ? rows : ['.'.repeat(SPRITE_WIDTH), ...rows]
+}
+
+// The card behind him on a graphical surface, so the black mask stands out on a dark theme.
+const CARD = '#3A3633'
+
+// His pixels as an SVG, `px` CSS pixels each, on a rounded card: what a graphical surface draws,
+// where text rows leave gaps between them. Each row's runs of one color are one rectangle.
+export function svgOf(pixels: readonly string[], px: number): string {
+  const pad = px
+  const width = Math.max(0, ...pixels.map(row => row.length)) * px + pad * 2
+  const height = pixels.length * px + pad * 2
+  const rects: string[] = []
+
+  pixels.forEach((row, y) => {
+    let x = 0
+
+    while (x < row.length) {
+      const letter = row[x] ?? '.'
+      let end = x + 1
+
+      while (end < row.length && row[end] === letter) {
+        end += 1
+      }
+
+      const color = PIXEL_COLOR[letter]
+
+      if (color !== undefined) {
+        rects.push(
+          `<rect x="${pad + x * px}" y="${pad + y * px}" width="${(end - x) * px}" height="${px}" fill="${color}"/>`
+        )
+      }
+
+      x = end
+    }
+  })
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
+    `viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges">` +
+    `<rect width="${width}" height="${height}" rx="${px * 2}" fill="${CARD}"/>${rects.join('')}</svg>`
+  )
 }
 
 // One run of a character row: its text, the color of its glyphs, and the color behind them.
