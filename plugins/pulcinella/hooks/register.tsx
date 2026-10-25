@@ -15,13 +15,10 @@ import {
   toContextMap,
   turnsLeft
 } from './context'
-import { EMOTE_COLOR, hatOf, labelOf, levelOf, linesOf, poseOf, quoteFor } from './mascot'
+import { cellsOf, labelOf, levelOf, linesOf, quoteFor, spriteOf } from './mascot'
 import { VESUVIUS } from './palette'
 
 const PANE = 'context-map'
-// The costume, the mask and the eyes behind it.
-const WHITE = '#F2EFE9'
-const MASK = '#1A1A1A'
 // The animation's beat; away NAP_MS, he falls asleep; a cheer or a gasp fades after CALM_MS.
 const TICK_MS = 500
 const NAP_MS = 10 * 60 * 1000
@@ -253,27 +250,27 @@ export const register: Register = on => {
     })
     const { Box, Text, Button } = $.ui.resolve(e)
     const { mood, quote } = await read($, face)
-    const pose = poseOf(mood, await read($, tick))
     const level = levelOf(await read($, tokens))
     const m = await read($, map)
-    const shift = (row: string) => (pose.lean === 1 ? ` ${row.slice(0, -1)}` : row)
+    const rows = cellsOf(spriteOf(mood, await read($, tick), level))
 
+    // Each character carries two pixels, its glyph's color above and its background below;
+    // monospaced, so the columns line up where the surface's font is proportional.
     const pulcinella = (
       <Box flexDirection="column" flexShrink={0} alignSelf="center">
-        {hatOf(level).map((row, i) => (
-          <Text mono color={WHITE}>
-            {shift(row)}
-            <Text color={EMOTE_COLOR[mood]}>{i === 0 ? pose.emote : ' '}</Text>
+        {rows.map(row => (
+          <Text mono>
+            {row.map(cell =>
+              cell.color === undefined ? (
+                cell.text
+              ) : (
+                <Text color={cell.color} backgroundColor={cell.background}>
+                  {cell.text}
+                </Text>
+              )
+            )}
           </Text>
         ))}
-        <Text mono color={WHITE}>
-          {pose.lean === 1 ? '  ▐' : ' ▐'}
-          <Text backgroundColor={MASK} color={WHITE}>{` ${pose.eyes} `}</Text>
-          {pose.lean === 1 ? '▌ ' : '▌  '}
-        </Text>
-        <Text mono color={WHITE}>
-          {shift(`  ▝${pose.mouth}▘   `)}
-        </Text>
       </Box>
     )
     const says = (
