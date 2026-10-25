@@ -1,6 +1,6 @@
 {
   "name": "pulcinella",
-  "version": "0.2.1",
+  "version": "0.3.2",
   "description": "Pulcinella lives above the prompt: he cheers green tests, frets over failures, naps when you're away and his hat grows with the tokens you spend",
   "author": { "name": "Davide D'Antonio" },
   "types": "./types/index.d.ts"

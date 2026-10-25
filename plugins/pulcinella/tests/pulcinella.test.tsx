@@ -2,7 +2,19 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { hatOf, labelOf, levelOf, linesOf, poseOf, QUOTES, quoteFor } from '../hooks/mascot'
+import {
+  cellsOf,
+  labelOf,
+  levelOf,
+  linesOf,
+  PIXEL_COLOR,
+  QUOTES,
+  quoteFor,
+  SPRITE_WIDTH,
+  spriteOf,
+  svgOf
+} from '../hooks/mascot'
+import type { Mood } from '../types'
 
 const BAND_PROPS = {
   hasSurvey: false,
@@ -24,21 +36,76 @@ test('his level rises with the tokens spent', async () => {
   expect([levelOf(0), levelOf(1_500_000), levelOf(300_000_000)]).toEqual([1, 2, 5])
 })
 
-test('his hat grows a row per level, every row eight cells wide', async () => {
-  expect([1, 2, 3, 4, 5].map(level => hatOf(level).map(row => row.length))).toEqual([
-    [8],
-    [8, 8],
-    [8, 8, 8],
-    [8, 8, 8, 8],
-    [8, 8, 8, 8, 8]
-  ])
+test('every frame of every mood is fourteen pixels wide, in pairs of rows', async () => {
+  const moods: Mood[] = ['idle', 'working', 'happy', 'worried', 'stunned', 'sleeping']
+  const shapes = moods.flatMap(mood =>
+    [0, 1, 11].flatMap(tick =>
+      [1, 2, 5].map(level => {
+        const rows = spriteOf(mood, tick, level)
+
+        return rows.length % 2 === 0 && rows.every(row => row.length === SPRITE_WIDTH)
+      })
+    )
+  )
+
+  expect(shapes.every(Boolean)).toBe(true)
+})
+
+test('the compact one is ten pixels wide and never more than six lines tall', async () => {
+  const moods: Mood[] = ['idle', 'working', 'happy', 'worried', 'stunned', 'sleeping']
+  const shapes = moods.flatMap(mood =>
+    [0, 1, 11].flatMap(tick => [1, 2, 5].map(level => spriteOf(mood, tick, level, 'compact')))
+  )
+
+  expect(shapes.every(rows => rows.every(row => row.length === 10))).toBe(true)
+  expect(Math.max(...shapes.map(rows => cellsOf(rows).length))).toBe(6)
+  expect(spriteOf('idle', 0, 1, 'compact')).not.toEqual(spriteOf('idle', 11, 1, 'compact'))
+})
+
+test('his hat grows a pixel per level', async () => {
+  expect([1, 2, 3, 5].map(level => spriteOf('idle', 0, level).length)).toEqual([16, 18, 18, 20])
 })
 
 test('he moves: two frames per mood, and a blink now and then while idle', async () => {
-  expect(poseOf('working', 0).eyes).not.toBe(poseOf('working', 1).eyes)
-  expect(poseOf('working', 1).lean).toBe(1)
-  expect([poseOf('sleeping', 0).emote, poseOf('sleeping', 1).emote]).toEqual(['z', 'Z'])
-  expect([poseOf('idle', 0).eyes, poseOf('idle', 11).eyes]).toEqual(['••', '──'])
+  expect(spriteOf('working', 0, 1)).not.toEqual(spriteOf('working', 1, 1))
+  expect(spriteOf('sleeping', 0, 1)).not.toEqual(spriteOf('sleeping', 1, 1))
+  expect(spriteOf('idle', 0, 1)).toEqual(spriteOf('idle', 1, 1))
+  expect(spriteOf('idle', 11, 1)).not.toEqual(spriteOf('idle', 0, 1))
+})
+
+test('cellsOf puts two pixels in each character, joining cells of the same colors', async () => {
+  expect(cellsOf(['WW.K', 'W.KK'])).toEqual([
+    [
+      { text: '█▀', color: PIXEL_COLOR.W },
+      { text: '▄█', color: PIXEL_COLOR.K }
+    ]
+  ])
+  expect(cellsOf(['WS', '..'])).toEqual([
+    [
+      { text: '▀', color: PIXEL_COLOR.W },
+      { text: '▀', color: PIXEL_COLOR.S }
+    ]
+  ])
+  expect(cellsOf(['S.', 'W.'])).toEqual([
+    [{ text: '▀', color: PIXEL_COLOR.S, background: PIXEL_COLOR.W }, { text: ' ' }]
+  ])
+})
+
+test('svgOf draws each run of one color as one rectangle, on a card', async () => {
+  const svg = svgOf(['WWK.', '..SS'], 5)
+
+  expect(svg).toMatch(/^<svg [^>]*width="30" height="20"/)
+  expect(svg.match(/<rect /g)?.length).toBe(4)
+  expect(svg).toContain(`<rect x="5" y="5" width="10" height="5" fill="${PIXEL_COLOR.W}"/>`)
+})
+
+test('his hat curls up a pixel per level instead of growing straight', async () => {
+  expect(spriteOf('idle', 0, 5).slice(0, 4)).toEqual([
+    '.............W',
+    '............W.',
+    '............W.',
+    '...........W..'
+  ])
 })
 
 test('a quote names what the moment is about', async () => {
@@ -56,6 +123,9 @@ test('linesOf counts the lines of a text', async () => {
 })
 
 // Any of his happy lines, as a pattern a rendered Text can match.
+const SLEEPY = new RegExp(
+  QUOTES.sleeping.map(q => q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+)
 const HAPPY = new RegExp(QUOTES.happy.map(q => q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'))
 
 // A session with nothing else in the band, where `npm run build` fails and every other command
@@ -101,7 +171,6 @@ test('he frets over a failed command and names it', async ($, on) => {
     })
     await $.tool.call({ tool: 'Bash', tool_use_id: `b1-${surface}`, command: 'npm run build' })
     expect(await ui.find({ type: 'Text', text: /npm run build/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: ' °° ' })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -117,7 +186,6 @@ test('he cheers when a test command passes', async ($, on) => {
       props: BAND_PROPS
     })
     await $.tool.call({ tool: 'Bash', tool_use_id: `b2-${surface}`, command: 'npm test' })
-    expect(await ui.find({ type: 'Text', text: ' ^^ ' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: HAPPY })).toBeDefined()
     await ui.unmount()
   }
@@ -166,11 +234,11 @@ test('he naps after ten quiet minutes and wakes at the next prompt', async ($, o
   })
 
   await clock.advance(9 * 60 * 1000)
-  expect(await ui.find({ type: 'Text', text: ' •• ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: SLEEPY })).toBeUndefined()
   await clock.advance(2 * 60 * 1000)
-  expect(await ui.find({ type: 'Text', text: ' ── ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: SLEEPY })).toBeDefined()
   await $.prompt.submit({ text: 'sveglia', wait: false, origin: { kind: 'composer' } })
-  expect(await ui.find({ type: 'Text', text: ' •• ' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: SLEEPY })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -195,4 +263,37 @@ test('he stands beside a band a plugin beneath draws', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: 'context band' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'livello 1' })).toBeDefined()
   await ui.unmount()
+})
+
+test('a graphical surface draws him as an image, the terminal as characters', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('session.start', async (_$, e) => e)
+  on('command.register', async (_$, e) => ({ value: { command: e.name } }))
+  on('ui.log', async () => ({ value: undefined }))
+  on('ui.render', async ($, e) => {
+    const { Box } = $.ui.resolve(e)
+
+    return <Box />
+  })
+  await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
+
+  const desktop = await $.ui.mount({
+    plugin: 'pulcinella',
+    surface: 'desktop',
+    component: 'AbovePrompt',
+    props: BAND_PROPS
+  })
+  expect(JSON.stringify(await desktop.find({ type: 'Box' }))).toContain('"type":"Svg"')
+  await desktop.unmount()
+
+  const terminal = await $.ui.mount({
+    plugin: 'pulcinella',
+    surface: 'terminal',
+    component: 'AbovePrompt',
+    props: BAND_PROPS
+  })
+  expect(JSON.stringify(await terminal.find({ type: 'Box' }))).not.toContain('"type":"Svg"')
+  expect(JSON.stringify(await terminal.find({ type: 'Box' }))).toMatch(/[▀▄█]/)
+  await terminal.unmount()
 })
