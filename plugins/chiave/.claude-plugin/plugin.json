@@ -1,0 +1,15 @@
+{
+  "name": "chiave",
+  "version": "0.1.0",
+  "description": "Chiave counts the commands you approve by hand and, past a threshold, offers to add the rule to the project's permissions in one click; risky commands are never offered",
+  "author": { "name": "Davide D'Antonio" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "threshold": {
+      "type": "number",
+      "title": "Approvals before a rule is offered",
+      "description": "How many times you approve the same kind of call before Chiave offers to allow it",
+      "default": 3
+    }
+  }
+}
