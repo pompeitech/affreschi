@@ -1,7 +1,0 @@
-{
-  "name": "context-map",
-  "version": "0.1.0",
-  "description": "A bar above the prompt showing how the context window fills up by category, in Vesuvius colors",
-  "author": { "name": "Davide D'Antonio" },
-  "types": "./types/index.d.ts"
-}

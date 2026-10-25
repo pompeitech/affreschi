@@ -1,0 +1,7 @@
+{
+  "name": "spaccanapoli",
+  "version": "0.1.0",
+  "description": "A git row above the prompt: branch and base, ahead and behind, files changed with lines added and removed, the branch's PR, and a warning when you work on main",
+  "author": { "name": "Davide D'Antonio" },
+  "types": "./types/index.d.ts"
+}

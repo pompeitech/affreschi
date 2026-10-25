@@ -13,19 +13,39 @@
       "description": "Spinner, tool call rows and end-of-turn line in Vesuvius colors"
     },
     {
-      "name": "touched-files",
-      "source": "./plugins/touched-files",
-      "description": "A pane listing the files read and edited this turn, with each one's diff"
-    },
-    {
-      "name": "context-map",
-      "source": "./plugins/context-map",
-      "description": "A bar above the prompt showing how the context window fills up by category, with a legend and a full breakdown pane"
-    },
-    {
       "name": "agent-usage",
       "source": "./plugins/agent-usage",
-      "description": "A pane showing how many tokens the main conversation and each subagent consumed"
+      "description": "A live pane showing how many tokens the main conversation and each subagent consumed, each with its pixel mascot"
+    },
+    {
+      "name": "pulcinella",
+      "source": "./plugins/pulcinella",
+      "description": "Pulcinella beside a live band of the context window: tokens used, headroom before compaction, turns left, the window by category. He cheers green tests, frets over failures, naps when you're away, and his hat grows with the tokens you spend"
+    },
+    {
+      "name": "maschere",
+      "source": "./plugins/maschere",
+      "description": "Pick a Commedia dell'arte mask and Claude answers in its voice: Pulcinella ironic, Arlecchino terse, Balanzone thorough"
+    },
+    {
+      "name": "spaccanapoli",
+      "source": "./plugins/spaccanapoli",
+      "description": "A git row above the prompt: branch, ahead/behind, lines changed, the branch's PR, and a warning when you work on main"
+    },
+    {
+      "name": "golfo",
+      "source": "./plugins/golfo",
+      "description": "Il Golfo: cost and tokens day by day across sessions and projects, with a weekly budget"
+    },
+    {
+      "name": "lazzarone",
+      "source": "./plugins/lazzarone",
+      "description": "A system notification when Claude has been waiting on you for a few minutes"
+    },
+    {
+      "name": "chiave",
+      "source": "./plugins/chiave",
+      "description": "Counts the commands you approve by hand and offers to allow the rule for good in one click; risky commands are never offered"
     }
   ]
 }

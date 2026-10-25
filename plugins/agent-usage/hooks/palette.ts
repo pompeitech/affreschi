@@ -7,7 +7,7 @@ export const VESUVIUS = {
   tuff: '#C9B79C',
   ash: '#8A8D91',
   gulf: '#2E86AB',
-  vineyard: '#7A9E4E',
+  vineyard: '#7A9E4E'
 } as const
 
 // The order categories take their colors in, warmest first.
@@ -17,5 +17,5 @@ export const SEQUENCE = [
   VESUVIUS.sulfur,
   VESUVIUS.tuff,
   VESUVIUS.gulf,
-  VESUVIUS.vineyard,
+  VESUVIUS.vineyard
 ] as const

@@ -3,8 +3,23 @@ import type { Register, Timer } from 'claude-code'
 import { VESUVIUS } from './palette'
 
 // The words for the spinner and the end-of-turn line, in place of Claude Code's.
-const WORDS: [string, ...string[]] = ['Bubbling', 'Erupting', 'Smoking', 'Rumbling', 'Venting', 'Flowing', 'Heating the magma']
-const PAST_WORDS: [string, ...string[]] = ['Erupted', 'Bubbled', 'Smoked', 'Rumbled', 'Flowed', 'Vented']
+const WORDS: [string, ...string[]] = [
+  'Bubbling',
+  'Erupting',
+  'Smoking',
+  'Rumbling',
+  'Venting',
+  'Flowing',
+  'Heating the magma'
+]
+const PAST_WORDS: [string, ...string[]] = [
+  'Erupted',
+  'Bubbled',
+  'Smoked',
+  'Rumbled',
+  'Flowed',
+  'Vented'
+]
 
 // The crater's glow: one frame per tick, alternating colors.
 const FRAMES = ['·', '∘', '○', '◎', '●', '◎', '○', '∘']
@@ -38,7 +53,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('turn.complete', async ($, e, next) => {
+  on('turn.complete', async (_$, e, next) => {
     timer?.cancel()
     timer = undefined
 
@@ -48,7 +63,9 @@ export const register: Register = on => {
   // The spinner: redrawn in the terminal; on the desktop Claude Code's own stays,
   // since there it says what the step is doing ("Creating notes.md").
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
-    if (e.surface !== 'terminal') return next(e)
+    if (e.surface !== 'terminal') {
+      return next(e)
+    }
 
     const { Box, Text } = $.ui.resolve(e)
     const text = e.props.message ?? word
