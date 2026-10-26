@@ -1,6 +1,6 @@
 import type { On } from 'claude-code'
-import type { Engine } from 'claude-code/testing'
-import { expect, test } from 'claude-code/testing'
+import type { Engine, MockClock } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import { ROLE_NAME, roleOf, SPRITE_WIDTH, spriteOf } from '../hooks/cast'
 import {
   addUsage,
@@ -10,9 +10,11 @@ import {
   formatTokens,
   MAIN,
   mergeKnown,
+  STALE_MS,
   shortModel,
   sorted,
   totalOf,
+  touched,
   upsert
 } from '../hooks/register'
 import type { AgentUsage, Role } from '../types'
@@ -88,6 +90,43 @@ test('mergeKnown updates statuses and adds the agents the hooks never saw', asyn
   ])
   expect(merged[1]?.label).toBe('reviewer@team')
   expect(merged[1]?.type).toBe('code-reviewer')
+})
+
+test('a busy agent the engine no longer lists finishes once it has been quiet long enough', async () => {
+  const quiet = {
+    ...emptyUsage('a1', 'Find config loading', 'Explore', 0, 1_000),
+    status: 'running' as const
+  }
+
+  const main = {
+    ...emptyUsage(MAIN, 'Main conversation', 'main', 0, 0),
+    status: 'running' as const
+  }
+
+  expect(mergeKnown([quiet, main], [], 1, 1_000 + STALE_MS - 1).map(a => a.status)).toEqual([
+    'running',
+    'running'
+  ])
+  expect(mergeKnown([quiet, main], [], 1, 1_000 + STALE_MS).map(a => a.status)).toEqual([
+    'completed',
+    'running'
+  ])
+  expect(
+    mergeKnown(
+      [quiet],
+      [{ id: 'a1', description: '', type: 'Explore', status: 'running' }],
+      1,
+      1e9
+    )[0]?.status
+  ).toBe('running')
+})
+
+test('touched brings a finished subagent back to work, and leaves the main loop as it was', async () => {
+  const done = { ...emptyUsage('a1', 'x', 'Explore'), status: 'completed' as const }
+  const main = { ...emptyUsage(MAIN, 'Main conversation', 'main'), status: 'idle' as const }
+
+  expect(touched(done, 3, 99)).toMatchObject({ status: 'running', lastTurn: 3, lastActiveAt: 99 })
+  expect(touched(main, 3, 99).status).toBe('idle')
 })
 
 test('formatTokens abbreviates thousands', async () => {
@@ -187,8 +226,21 @@ test('completedAgentOf reads a completed Agent call and ignores anything else', 
 
 // A session where the main loop made one request and the subagent a1 ("Find config loading",
 // an Explore agent) made two requests and one Read; `agentResult` is what an Agent call answers.
-async function seed($: Engine, on: On, agentResult: unknown = 'ok'): Promise<void> {
+async function seed(
+  $: Engine,
+  on: On,
+  agentResult: unknown = 'ok',
+  status: (string | undefined)[] = []
+): Promise<MockClock> {
+  const clock = mock.clock(on)
   on('session.start', async (_$, e) => e)
+  on('ui.log', async () => ({ value: undefined }))
+  on('agent.list', async () => ({ value: [] }))
+  on('ui.status', async (_$, e) => {
+    status.push(e.text)
+
+    return { value: undefined }
+  })
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
   on('prompt.submit', async (_$, e) => e)
   on('agent.spawn', async () => ({ model: 'claude-sonnet-5', agentId: 'a1' }))
@@ -237,6 +289,8 @@ async function seed($: Engine, on: On, agentResult: unknown = 'ok'): Promise<voi
   }
 
   await $.tool.call(readInSubagent)
+
+  return clock
 }
 
 test('the pane shows each agent with its mascot, model, share and counts', async ($, on) => {
@@ -353,5 +407,26 @@ test('clearing the archive takes its agents off the list and keeps them in the t
   await ui.press({ key: 'clear' })
   expect(await ui.find({ key: 'group-explorer' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /30k tokens · 3 requests/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('an agent that goes quiet and leaves the engine stops counting in the status line', async ($, on) => {
+  const status: (string | undefined)[] = []
+  const clock = await seed($, on, 'ok', status)
+
+  expect(status.at(-1)).toMatch(/^▲ 1 agent running/)
+
+  await clock.advance(STALE_MS + 4_000)
+
+  expect(status.at(-1)).toBeUndefined()
+
+  const ui = await $.ui.mount({
+    plugin: 'agent-usage',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'agent-usage',
+    props: PANE_PROPS
+  })
+  expect(await ui.find({ type: 'Text', text: /done/ })).toBeDefined()
   await ui.unmount()
 })
