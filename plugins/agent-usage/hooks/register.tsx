@@ -203,7 +203,9 @@ export function mergeKnown(
       const lastActiveAt = Number.isFinite(a.lastActiveAt) ? a.lastActiveAt : 0
       const isStale = a.id !== MAIN && isBusy(a) && at - lastActiveAt >= STALE_MS
 
-      return isStale ? { ...a, status: 'completed' as const, lastTurn: currentTurn } : a
+      // It keeps the turn it last worked in: stuck since an earlier turn, it goes straight to the
+      // archive instead of showing up as just finished.
+      return isStale ? { ...a, status: 'completed' as const } : a
     }
 
     return {

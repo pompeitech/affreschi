@@ -8,6 +8,7 @@ import {
   emptyUsage,
   formatDuration,
   formatTokens,
+  isOnStage,
   MAIN,
   mergeKnown,
   STALE_MS,
@@ -119,6 +120,15 @@ test('a busy agent the engine no longer lists finishes once it has been quiet lo
       1e9
     )[0]?.status
   ).toBe('running')
+})
+
+test('a row retired as stale keeps the turn it last worked in', async () => {
+  const stuck = { ...emptyUsage('a1', 'x', 'Explore', 2, 0), status: 'running' as const }
+  const [retired] = mergeKnown([stuck], [], 5, STALE_MS)
+
+  expect(retired).toMatchObject({ status: 'completed', lastTurn: 2 })
+  expect(retired !== undefined && isOnStage(retired, 5)).toBe(false)
+  expect(retired !== undefined && isOnStage(retired, 2)).toBe(true)
 })
 
 test('touched brings a finished subagent back to work, and leaves the main loop as it was', async () => {
