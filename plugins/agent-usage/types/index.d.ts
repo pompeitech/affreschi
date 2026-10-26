@@ -14,6 +14,9 @@ export type AgentUsage = {
   durationMs: number | null
   // The turn it last did something in: busy, or touched in the current turn, it stays on stage.
   lastTurn: number
+  // When it last made a model request or a tool call, in ms: a busy agent the engine no longer
+  // lists and that has been quiet for a while has finished.
+  lastActiveAt: number
 }
 
 // The character an agent plays, from its type or its name.

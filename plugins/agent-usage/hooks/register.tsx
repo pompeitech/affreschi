@@ -23,9 +23,16 @@ const openGroup = atom({ plugin: 'agent-usage', key: 'openGroup' } as const, nul
 const NOTHING_CLEARED: Cleared = { tokens: 0, steps: 0 }
 const cleared = atom({ plugin: 'agent-usage', key: 'cleared' } as const, NOTHING_CLEARED)
 
-export function emptyUsage(id: string, label: string, type: string, lastTurn = 0): AgentUsage {
+export function emptyUsage(
+  id: string,
+  label: string,
+  type: string,
+  lastTurn = 0,
+  lastActiveAt = 0
+): AgentUsage {
   return {
     lastTurn,
+    lastActiveAt,
     id,
     label,
     type,
@@ -158,6 +165,9 @@ export function completedAgentOf(
   return { agentId, totalDurationMs: typeof duration === 'number' ? duration : null }
 }
 
+// How long a busy agent the engine no longer lists may stay quiet before it counts as finished.
+export const STALE_MS = 30_000
+
 // Polls since the module loaded: its own, so a reload starts it over.
 let polls = 0
 // How often the pane reads the agents again, so a background agent's progress shows live.
@@ -177,17 +187,23 @@ function logFailure($: EngineInterface, what: string, error: unknown): void {
 
 // Folds the engine's list of agents into the rows: each known row takes its status (a change of
 // status counts as activity in `currentTurn`), and an agent the hooks never saw (a teammate, one
-// spawned before the mod loaded) gets a row of its own, on stage only while it is busy.
+// spawned before the mod loaded) gets a row of its own, on stage only while it is busy. A busy
+// row the engine does not list, quiet for STALE_MS at `at`, has finished: an agent the engine
+// does not know is not working, and nothing else would ever settle its row.
 export function mergeKnown(
   list: readonly AgentUsage[],
   known: readonly AgentInfo[],
-  currentTurn = 0
+  currentTurn = 0,
+  at = 0
 ): AgentUsage[] {
   const merged = list.map(a => {
     const info = known.find(k => k.id === a.id)
 
     if (info === undefined) {
-      return a
+      const lastActiveAt = Number.isFinite(a.lastActiveAt) ? a.lastActiveAt : 0
+      const isStale = a.id !== MAIN && isBusy(a) && at - lastActiveAt >= STALE_MS
+
+      return isStale ? { ...a, status: 'completed' as const, lastTurn: currentTurn } : a
     }
 
     return {
@@ -256,6 +272,14 @@ async function clearArchive($: EngineInterface): Promise<void> {
   await update($, openGroup, () => null)
 }
 
+// A row that just did something: active in `currentTurn` at `at`, and a subagent at work again
+// if it had been set down as finished.
+export function touched(a: AgentUsage, currentTurn: number, at: number): AgentUsage {
+  const status = a.id === MAIN || isBusy(a) ? a.status : 'running'
+
+  return { ...a, status, lastTurn: currentTurn, lastActiveAt: at }
+}
+
 function isBusy(a: AgentUsage): boolean {
   return a.status === 'running' || a.status === 'waiting' || a.status === 'pending'
 }
@@ -274,7 +298,7 @@ async function refresh($: EngineInterface): Promise<void> {
     return undefined
   })
   const list = await read($, agents)
-  const next = mergeKnown(list, known, await read($, turn))
+  const next = mergeKnown(list, known, await read($, turn), await $.clock.now())
 
   if (JSON.stringify(next) !== JSON.stringify(list)) {
     await update($, agents, () => next)
@@ -381,12 +405,13 @@ export const register: Register = on => {
     if (usage !== null) {
       const id = e.agentId ?? MAIN
       const now = await read($, turn)
+      const at = await $.clock.now()
       await update($, agents, list =>
         upsert(
           list,
           id,
-          a => ({ ...addUsage(a, usage), lastTurn: now }),
-          () => (id === MAIN ? mainRow() : emptyUsage(id, '', '', now))
+          a => touched(addUsage(a, usage), now, at),
+          () => (id === MAIN ? mainRow() : emptyUsage(id, '', '', now, at))
         )
       )
       await showStatus($)
@@ -399,12 +424,13 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     const id = e.agentId ?? MAIN
     const now = await read($, turn)
+    const at = await $.clock.now()
     await update($, agents, list =>
       upsert(
         list,
         id,
-        a => ({ ...a, tools: a.tools + 1, lastTurn: now }),
-        () => (id === MAIN ? mainRow() : emptyUsage(id, '', '', now))
+        a => touched({ ...a, tools: a.tools + 1 }, now, at),
+        () => (id === MAIN ? mainRow() : emptyUsage(id, '', '', now, at))
       )
     )
 
