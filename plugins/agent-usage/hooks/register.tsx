@@ -1,16 +1,42 @@
 import type { AgentInfo, EngineInterface, ModelUsage, Register } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 
-import type { AgentUsage, Cleared, Role } from '../types'
+import type { Activity, AgentUsage, Cleared, Phase, Role } from '../types'
+import { blockColors, blockSvg } from './blocks'
 import { ROLE_COLOR, ROLE_NAME, roleOf, SPRITE_WIDTH, type Sprite, spriteOf } from './cast'
 import { VESUVIUS } from './palette'
 
+const sessionTab = atom({ plugin: 'agent-usage', key: 'sessionTab' } as const, false)
+const initial: Activity[] = []
+const timeline = atom({ plugin: 'agent-usage', key: 'timeline' } as const, initial)
+const permissions = atom({ plugin: 'agent-usage', key: 'permissions' } as const, {
+  allow: 0,
+  ask: 0,
+  deny: 0
+})
+const contextUsage = atom({ plugin: 'agent-usage', key: 'contextUsage' } as const, null)
+
+async function record($: EngineInterface, agent: string, label: string, phase: Phase, at?: number) {
+  try {
+    const time = at ?? (await $.clock.now())
+    await update($, timeline, entries =>
+      [...entries, { agent, label, phase, time }].sort((a, b) => a.time - b.time).slice(-80)
+    )
+  } catch (error) {
+    $.ui.log(`Regia: registro non disponibile (${String(error)})`, { to: 'debug' })
+  }
+}
+
+const PHASE_COLOR = {
+  Richiesta: VESUVIUS.tuff,
+  Consulto: '#B69ADC',
+  Esecuzione: VESUVIUS.magma,
+  Verifica: VESUVIUS.gulf,
+  Concluso: VESUVIUS.vineyard
+}
+
 const PANE = 'agent-usage'
 export const MAIN = 'main'
-// Dark text on a colored badge, whatever its color.
-const BADGE_TEXT = '#1A1A1A'
-// The empty part of a bar.
-const TRACK = '#3A3A3A'
 // Pulcinella's mask, and the white of his eyes and of every costume's props.
 const MASK = '#1A1A1A'
 const WHITE = '#F2EFE9'
@@ -126,13 +152,13 @@ const STATUS_GLYPH: Record<AgentUsage['status'], string> = {
 }
 
 const STATUS_LABEL: Record<AgentUsage['status'], string> = {
-  pending: 'starting',
-  running: 'working',
-  waiting: 'waiting',
-  idle: 'idle',
-  completed: 'done',
-  failed: 'failed',
-  killed: 'stopped'
+  pending: 'in avvio',
+  running: 'al lavoro',
+  waiting: 'in attesa',
+  idle: 'in pausa',
+  completed: 'completato',
+  failed: 'errore',
+  killed: 'interrotto'
 }
 
 const STATUS_COLOR: Record<AgentUsage['status'], string> = {
@@ -174,7 +200,7 @@ let polls = 0
 const POLL_MS = 2000
 
 const mainRow = (): AgentUsage => ({
-  ...emptyUsage(MAIN, 'Main conversation', 'main'),
+  ...emptyUsage(MAIN, 'Conversazione principale', 'main'),
   status: 'idle'
 })
 
@@ -297,6 +323,16 @@ async function refresh($: EngineInterface): Promise<void> {
 
     return undefined
   })
+  const ctx = usage?.context
+  const nextContext =
+    ctx?.percent !== undefined && ctx.tokens !== undefined && ctx.window > 0
+      ? { tokens: ctx.tokens, window: ctx.window, percent: ctx.percent }
+      : null
+
+  if (usage && JSON.stringify(await read($, contextUsage)) !== JSON.stringify(nextContext)) {
+    await update($, contextUsage, () => nextContext)
+  }
+
   const list = await read($, agents)
   const next = mergeKnown(list, known, await read($, turn), await $.clock.now())
 
@@ -342,10 +378,27 @@ async function showStatus($: EngineInterface): Promise<void> {
 }
 
 export const register: Register = on => {
+  on('tool.check', async ($, e, next) => {
+    const verdict = await next(e)
+
+    if (e.tool_use_id !== undefined) {
+      await update($, permissions, counts => ({
+        ...counts,
+        [verdict.decision]: counts[verdict.decision] + 1
+      })).catch(error => $.ui.log(String(error), { to: 'debug' }))
+    }
+
+    return verdict
+  })
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'agent-usage',
       description: 'Open the pane with the tokens each agent consumed',
+      immediate: true
+    })
+    await $.command.register({
+      name: 'regia',
+      description: 'Apri la regia della sessione',
       immediate: true
     })
     $.clock.every(POLL_MS, () => {
@@ -355,9 +408,18 @@ export const register: Register = on => {
     return next(e)
   })
 
+  on('command.run', { command: 'regia' }, async $ => {
+    await update($, sessionTab, () => true)
+    await refresh($)
+    await $.ui.open({ id: PANE, title: 'Regia', focus: true, closeOnEscape: true })
+
+    return {}
+  })
+
   on('command.run', { command: 'agent-usage' }, async $ => {
     await refresh($)
-    await $.ui.open({ id: PANE, title: 'Agent usage', focus: true, closeOnEscape: true })
+    await update($, sessionTab, () => false)
+    await $.ui.open({ id: PANE, title: 'Regia', focus: true, closeOnEscape: true })
 
     return {}
   })
@@ -365,6 +427,7 @@ export const register: Register = on => {
   // Every prompt opens a turn: what finished in the last one moves to the archive.
   on('prompt.submit', async ($, e, next) => {
     await update($, turn, t => t + 1)
+    await record($, MAIN, 'Richiesta ricevuta', 'Richiesta')
 
     return next(e)
   })
@@ -375,6 +438,12 @@ export const register: Register = on => {
 
     if (result.agentId !== undefined) {
       const id = result.agentId
+      await record(
+        $,
+        id,
+        e.description || e.subagentType,
+        /architect/i.test(e.subagentType) ? 'Consulto' : 'Esecuzione'
+      )
       const now = await read($, turn)
       await update($, agents, list =>
         upsert(
@@ -400,6 +469,15 @@ export const register: Register = on => {
   // Every model request, in the main loop or in a subagent's: its tokens go to that loop.
   on('turn.step', async function* ($, e, next) {
     const result = yield* next(e)
+    for (const use of result.serverToolUses ?? []) {
+      if (use.name === 'advisor') {
+        await record($, e.agentId ?? MAIN, 'Consulto architetto', 'Consulto', use.startedAt)
+        if (use.endedAt !== undefined) {
+          await record($, e.agentId ?? MAIN, 'Parere ricevuto', 'Esecuzione', use.endedAt)
+        }
+      }
+    }
+
     const usage = result.usage
 
     if (usage !== null) {
@@ -434,7 +512,12 @@ export const register: Register = on => {
       )
     )
 
-    return next(e)
+    const result = await next(e)
+    const checking = e.tool === 'Bash' && /\b(test|vitest|jest|pytest|playwright)\b/.test(e.command)
+    const label = result.deny !== undefined ? 'Negato' : result.isError ? 'Errore' : 'Eseguito'
+    await record($, id, `${label} · ${e.tool}`, checking ? 'Verifica' : 'Esecuzione')
+
+    return result
   })
 
   // A foreground subagent ends: its Agent call reports how long it ran.
@@ -444,6 +527,7 @@ export const register: Register = on => {
 
     if (result !== undefined) {
       const id = result.agentId
+      await record($, id, 'Agente completato', 'Concluso')
       const now = await read($, turn)
       const finished = (await read($, agents)).find(a => a.id === id)
       await update($, agents, list =>
@@ -473,6 +557,7 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    await record($, MAIN, 'Turno concluso', 'Concluso')
     await refresh($)
     await showStatus($)
 
@@ -528,45 +613,137 @@ export const register: Register = on => {
         </Box>
       )
 
-      // Bars are boxes sized in percent, never counted characters: a desktop pane draws text in
-      // a proportional font, where a row of block glyphs overflows.
-      const bar = (percent: number, color: string) => (
-        <Box flexDirection="row" height={1} backgroundColor={TRACK}>
-          <Box width={`${percent}%`} height={1} backgroundColor={color}>
-            <Text> </Text>
+      const inSession = await read($, sessionTab)
+      const entries = (await read($, timeline)).slice().reverse()
+      const journal = (events: Activity[], showAgent = false) =>
+        events.map(entry => (
+          <Box flexDirection="row" columnGap={1}>
+            <Text mono color={VESUVIUS.ash}>
+              {new Date(entry.time).toLocaleTimeString('it-IT')}
+            </Text>
+            <Text color={PHASE_COLOR[entry.phase]}>●</Text>
+            <Text wrap="truncate-end">
+              {showAgent && (
+                <Text color={VESUVIUS.ash}>
+                  {entry.agent === MAIN
+                    ? 'Pulcinella'
+                    : list.find(a => a.id === entry.agent)?.type || 'Agente'}{' '}
+                  ·{' '}
+                </Text>
+              )}
+              {entry.label}
+            </Text>
           </Box>
+        ))
+      const header = (
+        <Box flexDirection="column">
+          <Box flexDirection="row" justifyContent="space-between">
+            <Text bold color={VESUVIUS.tuff}>
+              ◈ Regia
+            </Text>
+            <Text color={running.length ? VESUVIUS.magma : VESUVIUS.ash}>
+              {running.length} al lavoro
+            </Text>
+          </Box>
+          <Box flexDirection="row" columnGap={2}>
+            <Button
+              plain
+              key="sessione"
+              label={inSession ? '● Sessione' : 'Sessione'}
+              onPress={() => update($, sessionTab, () => true)}
+            />
+            <Button
+              plain
+              key="agenti"
+              label={inSession ? 'Agenti' : '● Agenti'}
+              onPress={() => update($, sessionTab, () => false)}
+            />
+          </Box>
+          <Text color={VESUVIUS.tuff}>
+            {formatTokens(grand)} token · {requests} richieste
+            {cost === null ? '' : ` · $${cost.toFixed(2)}`}
+          </Text>
         </Box>
       )
 
-      const header = (
-        <Box flexDirection="row" justifyContent="space-between">
-          <Text>
-            <Text color={VESUVIUS.lava}>◆</Text> <Text bold>Agent usage</Text>
-            {grand > 0 && (
-              <Text color={VESUVIUS.ash}>
-                {' '}
-                · {formatTokens(grand)} tokens
-                {cost !== null ? ' · ' : ''}
-                {cost !== null && <Text color={VESUVIUS.tuff}>${cost.toFixed(2)}</Text>} ·{' '}
-                {requests} {requests === 1 ? 'request' : 'requests'}
+      if (inSession) {
+        const checks = await read($, permissions)
+        const ctx = await read($, contextUsage)
+        const current = entries[0]
+        const surface = $.ui.resolve(e)
+        const Svg = e.surface !== 'terminal' && 'Svg' in surface ? surface.Svg : undefined
+        const colors = ctx
+          ? blockColors(
+              [
+                { weight: ctx.tokens, color: VESUVIUS.magma },
+                { weight: Math.max(0, ctx.window - ctx.tokens), color: '#454846' }
+              ],
+              Math.max(1, Math.min(42, Math.floor(e.props.bodyColumns / 2)))
+            )
+          : []
+
+        return (
+          <Box flexDirection="column" rowGap={1}>
+            {header}
+            <Box flexDirection="column">
+              <Text bold>
+                Turno {now} · {current?.phase ?? 'In attesa'}
               </Text>
+              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+                {(['Richiesta', 'Consulto', 'Esecuzione', 'Verifica', 'Concluso'] as const).map(
+                  phase => (
+                    <Text
+                      color={current?.phase === phase ? PHASE_COLOR[phase] : VESUVIUS.ash}
+                      bold={current?.phase === phase}
+                    >
+                      {current?.phase === phase ? '● ' : ''}
+                      {phase}
+                    </Text>
+                  )
+                )}
+              </Box>
+              {current && <Text color={PHASE_COLOR[current.phase]}>{current.label}</Text>}
+            </Box>
+            {ctx && (
+              <Box flexDirection="column">
+                <Text bold>Contesto · {ctx.percent}%</Text>
+                {Svg ? (
+                  <Svg source={blockSvg(colors)} alt={`Contesto: ${ctx.percent}%`} />
+                ) : (
+                  <Text mono>
+                    {colors.map(color => (
+                      <Text color={color}>▪ </Text>
+                    ))}
+                  </Text>
+                )}
+                <Text color={VESUVIUS.ash}>
+                  {formatTokens(ctx.tokens)} / {formatTokens(ctx.window)} token
+                </Text>
+              </Box>
             )}
-          </Text>
-          {running.length > 0 ? (
-            <Text backgroundColor={VESUVIUS.magma} color={BADGE_TEXT} bold>
-              {` ${running.length} AL LAVORO `}
-            </Text>
-          ) : (
-            <Text color={VESUVIUS.ash}>idle</Text>
-          )}
-        </Box>
-      )
+            <Box flexDirection="column">
+              <Text bold>Permessi</Text>
+              <Text>
+                {checks.allow} consentiti · {checks.ask} da confermare · {checks.deny} negati
+              </Text>
+            </Box>
+            <Box flexDirection="column">
+              <Text bold>Registro della sessione</Text>
+              {entries.length ? (
+                journal(entries.slice(0, 12), true)
+              ) : (
+                <Text color={VESUVIUS.ash}>In attesa del primo evento</Text>
+              )}
+            </Box>
+          </Box>
+        )
+      }
 
       if (list.length === 0) {
         return (
           <Box flexDirection="column" rowGap={1}>
             {header}
-            <Text color={VESUVIUS.ash}>No model requests yet.</Text>
+            <Text color={VESUVIUS.ash}>In attesa della prima richiesta.</Text>
           </Box>
         )
       }
@@ -577,51 +754,55 @@ export const register: Register = on => {
         const total = totalOf(a)
         const share = shareOf(total)
         const model = a.model ? shortModel(a.model) : ''
-        const when = a.status === 'completed' && a.id !== MAIN ? ' · this turn' : ''
+        const when = a.status === 'completed' && a.id !== MAIN ? ' · questo turno' : ''
 
         return (
           <Box flexDirection="column">
             <Box flexDirection="row" columnGap={2}>
               {figure(spriteOf(role, a.status), color)}
-              <Box flexDirection="column" flexGrow={1} justifyContent="flex-end">
-                <Box flexDirection="row" justifyContent="space-between">
-                  {/* A Button takes a label only: the model sits beside it. */}
-                  <Box flexDirection="row" columnGap={1}>
-                    <Button
-                      key={`agent-${a.id}`}
-                      plain
-                      label={a.label || a.type || a.id}
-                      onPress={() => update($, expanded, x => (x === a.id ? null : a.id))}
-                    />
-                    <Text color={VESUVIUS.ash} wrap="truncate-end">
-                      {model}
-                      {a.type !== 'main' && a.type !== '' ? ` · ${a.type}` : ''}
-                    </Text>
-                  </Box>
-                  <Text color={STATUS_COLOR[a.status]}>
-                    {`${STATUS_GLYPH[a.status]} ${STATUS_LABEL[a.status]}${when}`}
-                  </Text>
-                </Box>
-                {bar(total > 0 ? Math.max(1, share) : 0, color)}
-                <Box flexDirection="row" justifyContent="space-between" columnGap={2}>
+              <Box flexDirection="column" flexGrow={1} minWidth={0} justifyContent="center">
+                <Button
+                  key={`agent-${a.id}`}
+                  plain
+                  label={a.label || a.type || a.id}
+                  onPress={() => update($, expanded, x => (x === a.id ? null : a.id))}
+                />
+                <Text color={STATUS_COLOR[a.status]}>
+                  {STATUS_GLYPH[a.status]} {STATUS_LABEL[a.status]}
+                  {when}
+                </Text>
+                <Text color={VESUVIUS.ash} wrap="truncate-end">
+                  {model}
+                  {a.type && a.type !== 'main' ? ` · ${a.type}` : ''}
+                </Text>
+                <Box
+                  flexDirection="row"
+                  justifyContent="space-between"
+                  flexWrap="wrap"
+                  columnGap={2}
+                >
                   <Text>
                     <Text bold>{formatTokens(total)}</Text>{' '}
                     <Text color={VESUVIUS.ash}>{`${share}%`}</Text>
                   </Text>
                   <Text color={VESUVIUS.ash} wrap="truncate-end">
-                    {a.steps} {a.steps === 1 ? 'request' : 'requests'} · {a.tools} tool{' '}
-                    {a.tools === 1 ? 'call' : 'calls'}
+                    {a.steps} {a.steps === 1 ? 'richiesta' : 'richieste'} · {a.tools}{' '}
+                    {a.tools === 1 ? 'strumento' : 'strumenti'}
                   </Text>
                 </Box>
               </Box>
             </Box>
             {a.id === open && (
-              <Box flexDirection="row" columnGap={4} marginTop={1} marginLeft={SPRITE_WIDTH + 2}>
-                {tile('INPUT', formatTokens(a.input), VESUVIUS.gulf)}
-                {tile('OUTPUT', formatTokens(a.output), VESUVIUS.vineyard)}
-                {tile('CACHE READ', formatTokens(a.cacheRead), VESUVIUS.sulfur)}
-                {tile('CACHE WRITE', formatTokens(a.cacheWrite), VESUVIUS.tuff)}
-                {tile('RAN', formatDuration(a.durationMs))}
+              <Box flexDirection="column" marginTop={1} paddingX={1}>
+                <Text bold>Registro agente</Text>
+                {journal(entries.filter(entry => entry.agent === a.id).slice(0, 5))}
+                <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+                  {tile('INPUT', formatTokens(a.input), VESUVIUS.gulf)}
+                  {tile('OUTPUT', formatTokens(a.output), VESUVIUS.vineyard)}
+                  {tile('CACHE READ', formatTokens(a.cacheRead), VESUVIUS.sulfur)}
+                  {tile('CACHE WRITE', formatTokens(a.cacheWrite), VESUVIUS.tuff)}
+                  {tile('DURATA', formatDuration(a.durationMs))}
+                </Box>
               </Box>
             )}
           </Box>
@@ -636,8 +817,14 @@ export const register: Register = on => {
         return (
           <Box flexDirection="column">
             <Box flexDirection="row" columnGap={2} alignItems="center">
-              {figure(spriteOf(g.role, 'completed').slice(0, 2), color)}
-              <Box flexDirection="row" flexGrow={1} justifyContent="space-between" columnGap={2}>
+              <Text color={color}>{isOpen ? '▾' : '▸'}</Text>
+              <Box
+                flexDirection="row"
+                flexGrow={1}
+                justifyContent="space-between"
+                flexWrap="wrap"
+                columnGap={2}
+              >
                 <Box flexDirection="row" columnGap={1}>
                   <Button
                     key={`group-${g.role}`}
@@ -646,7 +833,7 @@ export const register: Register = on => {
                     onPress={() => update($, openGroup, x => (x === g.role ? null : g.role))}
                   />
                   <Text color={VESUVIUS.ash} wrap="truncate-end">
-                    {g.types.join(', ')}
+                    {isOpen ? g.types.join(', ') : ''}
                     {g.failed > 0 ? ' · ' : ''}
                     {g.failed > 0 && <Text color={VESUVIUS.lava}>{g.failed} failed</Text>}
                   </Text>
@@ -680,18 +867,18 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column" rowGap={1}>
           {header}
-          <Text color={VESUVIUS.ash}>IN SCENA</Text>
+          <Text color={VESUVIUS.ash}>In scena</Text>
           <Box flexDirection="column" rowGap={1}>
             {stage.map(actor)}
           </Box>
           {archive.length > 0 && (
             <Box flexDirection="column">
-              <Text color={VESUVIUS.ash}>ARCHIVIO · finished in earlier turns</Text>
+              <Text color={VESUVIUS.ash}>Archivio</Text>
               {archive.map(shelf)}
             </Box>
           )}
           <Box flexDirection="row" justifyContent="space-between">
-            <Text color={VESUVIUS.ash}>click a name for details · ▸ opens a group</Text>
+            <Text color={VESUVIUS.ash}>Seleziona un agente per il registro</Text>
             {archive.length > 0 && (
               <Button key="clear" plain label="svuota archivio" onPress={() => clearArchive($)} />
             )}

@@ -2,9 +2,9 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 
 import type { DetailItem, Face, Mood } from '../types'
+import { blockColors, blockSvg } from './blocks'
 import {
   alertColor,
-  allocateCells,
   colorOf,
   fillOf,
   formatTokens,
@@ -20,7 +20,7 @@ import { VESUVIUS } from './palette'
 
 const PANE = 'context-map'
 // CSS pixels per sprite pixel where Pulcinella is drawn as an image.
-const SVG_PIXEL = 6
+const SVG_PIXEL = 5
 // The animation's beat; away NAP_MS, he falls asleep; a cheer or a gasp fades after CALM_MS.
 const TICK_MS = 500
 const NAP_MS = 10 * 60 * 1000
@@ -307,8 +307,15 @@ export const register: Register = on => {
       const isHidden = await read($, isLegendHidden)
       const headroom = headroomOf(m)
       const turns = turnsLeft(await read($, totals), headroom)
-      // Cells only weigh the segments: the bar is boxes that grow by their share of the row.
-      const cells = allocateCells(m.segments, m.max, 1000)
+      const available = Math.max(1, e.props.bodyColumns - 18)
+      const count = Math.max(1, Math.min(42, Math.floor(available / 2)))
+      const colors = blockColors(
+        m.segments.map((s, i) => ({
+          weight: s.tokens,
+          color: fillOf(m.segments, i)
+        })),
+        count
+      )
       const used = m.segments.flatMap((s, i) =>
         s.kind === 'used' && s.tokens > 0 ? [{ s, i }] : []
       )
@@ -316,74 +323,60 @@ export const register: Register = on => {
       const folded = used.length - chips.length
 
       side = (
-        <Box
-          flexDirection="column"
-          flexGrow={1}
-          borderStyle="round"
-          borderColor={VESUVIUS.ash}
-          paddingX={1}
-        >
+        <Box flexDirection="column" flexGrow={1} paddingX={1}>
           <Box flexDirection="row" justifyContent="space-between">
             <Text>
-              <Text color={VESUVIUS.lava}>◆</Text> <Text bold>context</Text>{' '}
-              <Text color={VESUVIUS.ash}>
-                · {formatTokens(m.max)} · {m.percent}% · livello {level}
-              </Text>
+              <Text color={VESUVIUS.tuff}>◈</Text> <Text bold>Contesto</Text>{' '}
+              <Text color={VESUVIUS.ash}>· livello {level}</Text>
             </Text>
             <Box flexDirection="row" columnGap={1}>
               <Button
                 key="legend"
                 plain
-                label={isHidden ? 'legend' : 'hide'}
+                label={isHidden ? 'mostra legenda' : 'nascondi legenda'}
                 onPress={() => update($, isLegendHidden, v => !v)}
               />
               <Button
                 key="details"
                 plain
-                label="details"
+                label="dettagli ↗"
                 onPress={() =>
                   $.ui.open({ id: PANE, title: 'Context map', focus: true, closeOnEscape: true })
                 }
               />
             </Box>
           </Box>
-          <Box flexDirection="row" alignItems="flex-end" columnGap={4}>
+          <Box flexDirection="row" flexWrap="wrap" alignItems="flex-end" columnGap={3}>
             <Box flexDirection="column">
-              <Text color={VESUVIUS.ash}>used</Text>
-              <Text bold>{formatTokens(m.total)}</Text>
+              <Text color={alertColor(m.percent)} bold>
+                {m.percent}% utilizzato
+              </Text>
+              <Text color={VESUVIUS.ash}>
+                {formatTokens(m.total)} / {formatTokens(m.max)} token
+              </Text>
             </Box>
             <Box flexDirection="column">
               <Text color={VESUVIUS.ash}>
-                {m.autoCompactThreshold !== null ? 'before compaction' : 'free'}
+                {m.autoCompactThreshold !== null ? 'prima della compattazione' : 'disponibili'}
               </Text>
               <Text color={headroomColor(m)} bold>
                 {formatTokens(headroom)}
               </Text>
             </Box>
             <Box flexGrow={1} />
-            {turns !== null && (
-              <Text color={VESUVIUS.ash}>≈ {turns} turns at the current pace</Text>
-            )}
+            {turns !== null && <Text color={VESUVIUS.ash}>≈ {turns} turni al ritmo attuale</Text>}
           </Box>
-          {/* One row whatever the surface: each segment is a filled box that grows by its share,
-              so nothing can wrap where a graphical surface's cells are not bodyColumns'. */}
-          <Box flexDirection="row" height={1}>
-            {m.segments.map((s, i) =>
-              (cells[i] ?? 0) > 0 ? (
-                <Box
-                  key={s.name}
-                  width={0}
-                  flexGrow={cells[i]}
-                  height={1}
-                  backgroundColor={fillOf(m.segments, i)}
-                >
-                  <Text> </Text>
-                </Box>
-              ) : null
-            )}
-          </Box>
+          {Svg && colors.length > 0 ? (
+            <Svg source={blockSvg(colors)} alt={`Contesto utilizzato: ${m.percent}%`} />
+          ) : (
+            <Text mono wrap="truncate-end">
+              {colors.map((color, i) => (
+                <Text color={color}>{i ? ' ▪' : '▪'}</Text>
+              ))}
+            </Text>
+          )}
           {!isHidden && (
-            <Box flexDirection="row" flexWrap="wrap" columnGap={3}>
+            <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
               {chips.map(({ s, i }) => (
                 <Text key={s.name}>
                   <Text color={colorOf(m.segments, i)}>■</Text>{' '}
@@ -391,7 +384,7 @@ export const register: Register = on => {
                   <Text bold>{formatTokens(s.tokens)}</Text>
                 </Text>
               ))}
-              {folded > 0 && <Text color={VESUVIUS.ash}>+{folded} more</Text>}
+              {folded > 0 && <Text color={VESUVIUS.ash}>+{folded} altre</Text>}
             </Box>
           )}
           {says}
@@ -400,7 +393,7 @@ export const register: Register = on => {
     }
 
     const band = (
-      <Box flexDirection="row" columnGap={2}>
+      <Box flexDirection="row" columnGap={2} paddingY={1}>
         {pulcinella}
         {side}
       </Box>
