@@ -1,6 +1,6 @@
 {
   "name": "agent-usage",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Regia: live session activity, permission checks, context usage and expandable agent logs",
   "author": { "name": "Davide D'Antonio" },
   "types": "./types/index.d.ts"
