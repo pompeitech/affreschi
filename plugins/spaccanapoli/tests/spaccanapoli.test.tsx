@@ -129,7 +129,7 @@ test('changes made right on main raise the warning in place of the PR', async ($
     component: 'AbovePrompt',
     props: BAND_PROPS
   })
-  expect(await ui.find({ type: 'Text', text: / ATTENTO: SEI SU MAIN / })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⚠ Modifiche su main/ })).toBeDefined()
   await ui.unmount()
 })
 

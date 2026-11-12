@@ -33,9 +33,16 @@ export type Role =
 // What the archive's clear-out took off the list, still counted in the totals.
 export type Cleared = { tokens: number; steps: number }
 
+export type Phase = 'Richiesta' | 'Consulto' | 'Esecuzione' | 'Verifica' | 'Concluso'
+export type Activity = { time: number; agent: string; label: string; phase: Phase }
+
 declare module 'claude-code' {
   interface PluginState {
     'agent-usage': {
+      sessionTab: boolean
+      timeline: Activity[]
+      permissions: { allow: number; ask: number; deny: number }
+      contextUsage: { tokens: number; window: number; percent: number } | null
       agents: AgentUsage[]
       expanded: string | null
       costUsd: number | null

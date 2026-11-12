@@ -15,7 +15,7 @@
     {
       "name": "agent-usage",
       "source": "./plugins/agent-usage",
-      "description": "A live pane showing how many tokens the main conversation and each subagent consumed, each with its pixel mascot"
+      "description": "Regia: session activity, context and permissions, with per-agent usage and inline logs"
     },
     {
       "name": "pulcinella",

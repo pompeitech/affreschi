@@ -65,7 +65,7 @@ test('upsert creates a missing row and changes an existing one', async () => {
 test('sorted puts the main conversation first, then the biggest subagents', async () => {
   const small = addUsage(emptyUsage('s', 'small', 'Explore'), USAGE)
   const big = addUsage(addUsage(emptyUsage('b', 'big', 'Plan'), USAGE), USAGE)
-  const main = emptyUsage(MAIN, 'Main conversation', 'main')
+  const main = emptyUsage(MAIN, 'Conversazione principale', 'main')
   expect(sorted([small, main, big]).map(a => a.id)).toEqual([MAIN, 'b', 's'])
 })
 
@@ -99,7 +99,7 @@ test('a busy agent the engine no longer lists finishes once it has been quiet lo
   }
 
   const main = {
-    ...emptyUsage(MAIN, 'Main conversation', 'main', 0, 0),
+    ...emptyUsage(MAIN, 'Conversazione principale', 'main', 0, 0),
     status: 'running' as const
   }
 
@@ -123,7 +123,7 @@ test('a busy agent the engine no longer lists finishes once it has been quiet lo
 
 test('touched brings a finished subagent back to work, and leaves the main loop as it was', async () => {
   const done = { ...emptyUsage('a1', 'x', 'Explore'), status: 'completed' as const }
-  const main = { ...emptyUsage(MAIN, 'Main conversation', 'main'), status: 'idle' as const }
+  const main = { ...emptyUsage(MAIN, 'Conversazione principale', 'main'), status: 'idle' as const }
 
   expect(touched(done, 3, 99)).toMatchObject({ status: 'running', lastTurn: 3, lastActiveAt: 99 })
   expect(touched(main, 3, 99).status).toBe('idle')
@@ -157,7 +157,7 @@ test('roleOf casts an agent from its type, then from its name', async () => {
     cast('frontend-dev'),
     cast('general-purpose'),
     cast('general-purpose', 'Redesign the settings UI'),
-    roleOf({ id: MAIN, type: 'main', label: 'Main conversation' }, MAIN)
+    roleOf({ id: MAIN, type: 'main', label: 'Conversazione principale' }, MAIN)
   ]).toEqual([
     'explorer',
     'nerd',
@@ -304,15 +304,15 @@ test('the pane shows each agent with its mascot, model, share and counts', async
       requestId: 'agent-usage',
       props: PANE_PROPS
     })
-    expect(await ui.find({ type: 'Text', text: /30k tokens · 3 requests/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /30k token · 3 richieste/ })).toBeDefined()
     // The Explore agent plays the explorer: a lamp on the head, eyes open while it works.
     expect(await ui.find({ type: 'Text', text: /◉▄▄▄/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /▐▛███▜▌/ })).toBeDefined()
-    expect((await ui.find({ key: `agent-${MAIN}` }))?.text).toBe('Main conversation')
+    expect((await ui.find({ key: `agent-${MAIN}` }))?.text).toBe('Conversazione principale')
     expect((await ui.find({ key: 'agent-a1' }))?.text).toBe('Find config loading')
     expect(await ui.find({ type: 'Text', text: 'sonnet-5 · Explore' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /20k 67%/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^2 requests · 1 tool call$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^2 richieste · 1 strumento$/ })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -354,7 +354,7 @@ test('a completed Agent call marks its agent done and records how long it ran', 
     requestId: 'agent-usage',
     props: PANE_PROPS
   })
-  expect(await ui.find({ type: 'Text', text: /done/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /completato/ })).toBeDefined()
   await ui.press({ key: 'agent-a1' })
   expect(await ui.find({ type: 'Text', text: '1m 4s' })).toBeDefined()
   await ui.unmount()
@@ -406,7 +406,7 @@ test('clearing the archive takes its agents off the list and keeps them in the t
   })
   await ui.press({ key: 'clear' })
   expect(await ui.find({ key: 'group-explorer' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /30k tokens · 3 requests/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /30k token · 3 richieste/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -427,6 +427,36 @@ test('an agent that goes quiet and leaves the engine stops counting in the statu
     requestId: 'agent-usage',
     props: PANE_PROPS
   })
-  expect(await ui.find({ type: 'Text', text: /done/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /completato/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('Regia opens the observed session, switches tabs and expands activity in place', async ($, on) => {
+  on('ui.open', async () => ({ value: { isPlaced: true as const } }))
+  on('session.usage', async () => ({
+    value: { startedAt: 0, context: { tokens: 24000, window: 100000, percent: 24 }, rateLimits: [] }
+  }))
+  await seed($, on)
+  await $.command.run({ command: 'regia' })
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({
+      plugin: 'agent-usage',
+      surface,
+      component: 'Pane',
+      requestId: 'agent-usage',
+      props: PANE_PROPS
+    })
+    expect(await ui.find({ type: 'Text', text: /Contesto · 24%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Eseguito · Read/ })).toBeDefined()
+    await ui.press({ key: 'agenti' })
+    await ui.press({ key: 'agent-a1' })
+    expect(await ui.find({ type: 'Text', text: 'Registro agente' })).toBeDefined()
+    expect(await ui.find({ key: `agent-${MAIN}` })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Eseguito · Read/ })).toBeDefined()
+    await ui.press({ key: 'agent-a1' })
+    expect(await ui.find({ type: 'Text', text: 'Registro agente' })).toBeUndefined()
+    await ui.press({ key: 'sessione' })
+    await ui.unmount()
+  }
 })

@@ -10,7 +10,6 @@ const REFRESH_MS = 3000
 const POLL_MS = 10_000
 // gh asks GitHub, so the PR is asked for less often.
 const PR_EVERY_MS = 60_000
-const BADGE_TEXT = '#1A1A1A'
 const FILE_TOOLS = new Set(['Bash', 'Edit', 'Write', 'NotebookEdit'])
 
 const NO_REPO: Repo | null = null
@@ -156,16 +155,15 @@ export const register: Register = on => {
 
     const onBase = isOnBase(r.branch, r.base)
     const isRisky = onBase && r.files > 0
-    const branchColor = isRisky ? VESUVIUS.lava : VESUVIUS.vineyard
+    const branchColor = isRisky ? VESUVIUS.magma : VESUVIUS.vineyard
     const pull = r.pr === null ? null : prLabel(r.pr)
-    const changed = r.added + r.removed
 
     const row = (
       <Box flexDirection="column" paddingX={1}>
-        <Box flexDirection="row" justifyContent="space-between" columnGap={2}>
+        <Box flexDirection="row" flexWrap="wrap" justifyContent="space-between" columnGap={2}>
           <Text wrap="truncate-end">
             <Text color={branchColor}>⎇</Text>{' '}
-            <Text bold color={isRisky ? VESUVIUS.lava : undefined}>
+            <Text bold color={isRisky ? VESUVIUS.magma : undefined}>
               {r.branch}
             </Text>
             {r.base !== null && !onBase && <Text color={VESUVIUS.ash}> → {r.base}</Text>}{' '}
@@ -174,31 +172,19 @@ export const register: Register = on => {
           </Text>
           <Box flexDirection="row" columnGap={2}>
             <Text>
-              <Text color={VESUVIUS.ash}>
-                {r.files} {r.files === 1 ? 'file' : 'files'}
-              </Text>{' '}
+              <Text color={VESUVIUS.ash}>{r.files} file</Text>{' '}
               <Text color={VESUVIUS.vineyard}>+{r.added}</Text>{' '}
               <Text color={VESUVIUS.lava}>−{r.removed}</Text>
             </Text>
             {isRisky ? (
-              <Text backgroundColor={VESUVIUS.lava} color={BADGE_TEXT} bold>
-                {` ATTENTO: SEI SU ${r.branch.toUpperCase()} `}
+              <Text color={VESUVIUS.magma} bold>
+                {`⚠ Modifiche su ${r.branch}`}
               </Text>
             ) : (
               pull !== null && <Text color={pull.color}>{pull.text}</Text>
             )}
           </Box>
         </Box>
-        {changed > 0 && (
-          <Box flexDirection="row" height={1}>
-            <Box width={0} flexGrow={r.added} height={1} backgroundColor={VESUVIUS.vineyard}>
-              <Text> </Text>
-            </Box>
-            <Box width={0} flexGrow={r.removed} height={1} backgroundColor={VESUVIUS.lava}>
-              <Text> </Text>
-            </Box>
-          </Box>
-        )}
       </Box>
     )
 

@@ -163,11 +163,11 @@ test('the band shows used and headroom, the chips, and hides them on request', a
       component: 'AbovePrompt',
       props: BAND_PROPS
     })
-    expect(await ui.find({ type: 'Text', text: /200k · 40%/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'before compaction' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /40% utilizzato/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'prima della compattazione' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '87k' })).toBeDefined()
     // No estimate before two turns have ended.
-    expect(await ui.find({ type: 'Text', text: /turns at the current pace/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /turni al ritmo attuale/ })).toBeUndefined()
 
     // The chips are there from the start: used categories only, largest first.
     expect(await ui.find({ type: 'Text', text: /messages 60k/ })).toBeDefined()
@@ -208,7 +208,7 @@ test('the band keeps what a plugin beneath draws, under its own', async ($, on) 
     props: BAND_PROPS
   })
   expect(await ui.find({ type: 'Text', text: 'pulcinella' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'before compaction' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'prima della compattazione' })).toBeDefined()
   await ui.unmount()
 })
 
