@@ -304,15 +304,23 @@ test('the pane shows each agent with its mascot, model, share and counts', async
       requestId: 'agent-usage',
       props: PANE_PROPS
     })
-    expect(await ui.find({ type: 'Text', text: /30k token · 3 richieste/ })).toBeDefined()
-    // The Explore agent plays the explorer: a lamp on the head, eyes open while it works.
-    expect(await ui.find({ type: 'Text', text: /◉▄▄▄/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /▐▛███▜▌/ })).toBeDefined()
     expect((await ui.find({ key: `agent-${MAIN}` }))?.text).toBe('Conversazione principale')
     expect((await ui.find({ key: 'agent-a1' }))?.text).toBe('Find config loading')
-    expect(await ui.find({ type: 'Text', text: 'sonnet-5 · Explore' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /20k 67%/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^2 richieste · 1 strumento$/ })).toBeDefined()
+    if (surface === 'desktop') {
+      expect(await ui.find({ type: 'Text', text: 'CONSUMI DI SESSIONE' })).toBeDefined()
+      for (const value of ['30k', 'costo sessione', 'richieste', '20k', '67%']) {
+        expect(await ui.find({ type: 'Text', text: value })).toBeDefined()
+      }
+      expect(await ui.find({ type: 'Svg' })).toBeDefined()
+    } else {
+      expect(await ui.find({ type: 'Text', text: /30k token · 3 richieste/ })).toBeDefined()
+      // The Explore agent plays the explorer: a lamp on the head, eyes open while it works.
+      expect(await ui.find({ type: 'Text', text: /◉▄▄▄/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /▐▛███▜▌/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: 'sonnet-5 · Explore' })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /20k 67%/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^2 richieste · 1 strumento$/ })).toBeDefined()
+    }
     await ui.unmount()
   }
 })

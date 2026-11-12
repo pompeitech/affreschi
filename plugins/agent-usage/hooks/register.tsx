@@ -2,6 +2,7 @@ import type { AgentInfo, EngineInterface, ModelUsage, Register } from 'claude-co
 import { atom, read, update } from 'claude-code'
 
 import type { Activity, AgentUsage, Cleared, Phase, Role } from '../types'
+import { avatarSvg } from './avatar'
 import { blockColors, blockSvg } from './blocks'
 import { ROLE_COLOR, ROLE_NAME, roleOf, SPRITE_WIDTH, type Sprite, spriteOf } from './cast'
 import { VESUVIUS } from './palette'
@@ -635,7 +636,68 @@ export const register: Register = on => {
             </Text>
           </Box>
         ))
-      const header = (
+      const desktop = e.surface === 'desktop'
+      const surface = $.ui.resolve(e)
+      const Svg = e.surface !== 'terminal' && 'Svg' in surface ? surface.Svg : undefined
+      const card = desktop
+        ? {
+            borderStyle: 'round',
+            borderColor: '#394244',
+            backgroundColor: '#1C2224',
+            paddingX: 'md' as const,
+            paddingY: 'sm' as const
+          }
+        : {}
+      const metric = (value: string, caption: string) => (
+        <Box flexDirection="column" flexGrow={1}>
+          <Text size="heading" mono weight="semibold" color="#F1EFEA">
+            {value}
+          </Text>
+          <Text size="caption" color="#AFB8B6">
+            {caption}
+          </Text>
+        </Box>
+      )
+      const heading = desktop ? (
+        <Box flexDirection="column" rowGap="sm">
+          <Text size="footnote" color="#B9C2C0">
+            <Text color="#FFAC72">◈ </Text> Affreschi / Claude Code
+          </Text>
+          <Text size="title" weight="bold">
+            Regia
+          </Text>
+          <Box flexDirection="row" columnGap="sm">
+            <Button
+              key="sessione"
+              variant={inSession ? 'primary' : 'secondary'}
+              label="Sessione"
+              onPress={() => update($, sessionTab, () => true)}
+            />
+            <Button
+              key="agenti"
+              variant={inSession ? 'secondary' : 'primary'}
+              label="Agenti"
+              onPress={() => update($, sessionTab, () => false)}
+            />
+          </Box>
+          <Box
+            {...card}
+            backgroundColor="#2B2926"
+            borderColor="#49433C"
+            flexDirection="column"
+            rowGap="sm"
+          >
+            <Text size="caption" mono color="#CBBDB0">
+              CONSUMI DI SESSIONE
+            </Text>
+            <Box flexDirection="row" flexWrap="wrap" columnGap="md">
+              {metric(formatTokens(grand), 'token')}
+              {metric(cost === null ? '—' : `$${cost.toFixed(2)}`, 'costo sessione')}
+              {metric(String(requests), 'richieste')}
+            </Box>
+          </Box>
+        </Box>
+      ) : (
         <Box flexDirection="column">
           <Box flexDirection="row" justifyContent="space-between">
             <Text bold color={VESUVIUS.tuff}>
@@ -670,8 +732,6 @@ export const register: Register = on => {
         const checks = await read($, permissions)
         const ctx = await read($, contextUsage)
         const current = entries[0]
-        const surface = $.ui.resolve(e)
-        const Svg = e.surface !== 'terminal' && 'Svg' in surface ? surface.Svg : undefined
         const colors = ctx
           ? blockColors(
               [
@@ -683,9 +743,9 @@ export const register: Register = on => {
           : []
 
         return (
-          <Box flexDirection="column" rowGap={1}>
-            {header}
-            <Box flexDirection="column">
+          <Box flexDirection="column" rowGap={desktop ? 'md' : 1} paddingX={desktop ? 'sm' : 0}>
+            {heading}
+            <Box {...card} flexDirection="column">
               <Text bold>
                 Turno {now} · {current?.phase ?? 'In attesa'}
               </Text>
@@ -705,7 +765,7 @@ export const register: Register = on => {
               {current && <Text color={PHASE_COLOR[current.phase]}>{current.label}</Text>}
             </Box>
             {ctx && (
-              <Box flexDirection="column">
+              <Box {...card} flexDirection="column">
                 <Text bold>Contesto · {ctx.percent}%</Text>
                 {Svg ? (
                   <Svg source={blockSvg(colors)} alt={`Contesto: ${ctx.percent}%`} />
@@ -721,13 +781,13 @@ export const register: Register = on => {
                 </Text>
               </Box>
             )}
-            <Box flexDirection="column">
+            <Box {...card} flexDirection="column">
               <Text bold>Permessi</Text>
               <Text>
                 {checks.allow} consentiti · {checks.ask} da confermare · {checks.deny} negati
               </Text>
             </Box>
-            <Box flexDirection="column">
+            <Box {...card} flexDirection="column">
               <Text bold>Registro della sessione</Text>
               {entries.length ? (
                 journal(entries.slice(0, 12), true)
@@ -742,7 +802,7 @@ export const register: Register = on => {
       if (list.length === 0) {
         return (
           <Box flexDirection="column" rowGap={1}>
-            {header}
+            {heading}
             <Text color={VESUVIUS.ash}>In attesa della prima richiesta.</Text>
           </Box>
         )
@@ -754,47 +814,91 @@ export const register: Register = on => {
         const total = totalOf(a)
         const share = shareOf(total)
         const model = a.model ? shortModel(a.model) : ''
+        const displayModel = model.replace(
+          /^(opus|sonnet|haiku)-(\d+)(?:-(\d+))?$/i,
+          (_, family: string, major: string, minor?: string) =>
+            `${family.charAt(0).toUpperCase()}${family.slice(1)} ${major}${minor ? `.${minor}` : ''}`
+        )
         const when = a.status === 'completed' && a.id !== MAIN ? ' · questo turno' : ''
 
         return (
           <Box flexDirection="column">
-            <Box flexDirection="row" columnGap={2}>
-              {figure(spriteOf(role, a.status), color)}
-              <Box flexDirection="column" flexGrow={1} minWidth={0} justifyContent="center">
-                <Button
-                  key={`agent-${a.id}`}
-                  plain
-                  label={a.label || a.type || a.id}
-                  onPress={() => update($, expanded, x => (x === a.id ? null : a.id))}
-                />
-                <Text color={STATUS_COLOR[a.status]}>
-                  {STATUS_GLYPH[a.status]} {STATUS_LABEL[a.status]}
-                  {when}
-                </Text>
-                <Text color={VESUVIUS.ash} wrap="truncate-end">
-                  {model}
-                  {a.type && a.type !== 'main' ? ` · ${a.type}` : ''}
-                </Text>
-                <Box
-                  flexDirection="row"
-                  justifyContent="space-between"
-                  flexWrap="wrap"
-                  columnGap={2}
-                >
-                  <Text>
-                    <Text bold>{formatTokens(total)}</Text>{' '}
-                    <Text color={VESUVIUS.ash}>{`${share}%`}</Text>
-                  </Text>
-                  <Text color={VESUVIUS.ash} wrap="truncate-end">
-                    {a.steps} {a.steps === 1 ? 'richiesta' : 'richieste'} · {a.tools}{' '}
-                    {a.tools === 1 ? 'strumento' : 'strumenti'}
+            {desktop && Svg ? (
+              <Box flexDirection="row" columnGap="sm" alignItems="center" paddingY="sm">
+                <Box flexShrink={0}>
+                  <Svg
+                    source={avatarSvg(role, a.status)}
+                    width={40}
+                    height={40}
+                    alt={ROLE_NAME[role][0]}
+                  />
+                </Box>
+                <Box flexDirection="column" width={0} minWidth={0} flexGrow={1} overflow="hidden">
+                  <Button
+                    key={`agent-${a.id}`}
+                    plain
+                    label={a.id === MAIN ? 'Conversazione principale' : a.label || a.type || a.id}
+                    onPress={() => update($, expanded, x => (x === a.id ? null : a.id))}
+                  />
+                  <Text size="footnote" wrap="truncate-end" color="#AFB8B6">
+                    {displayModel || a.type} ·{' '}
+                    <Text color={STATUS_COLOR[a.status]}>{STATUS_LABEL[a.status]}</Text>
                   </Text>
                 </Box>
+                <Box flexDirection="column" alignItems="flex-end" flexShrink={0}>
+                  <Text mono weight="semibold" color="#F1EFEA">
+                    {formatTokens(total)}
+                  </Text>
+                  <Text size="caption" mono color="#AFB8B6">
+                    {total > 0 && share === 0 ? '<1' : share}%
+                  </Text>
+                </Box>
+                <Text color="#AFB8B6">{open === a.id ? '⌄' : '›'}</Text>
               </Box>
-            </Box>
+            ) : (
+              <Box flexDirection="row" columnGap={2}>
+                {figure(spriteOf(role, a.status), color)}
+                <Box flexDirection="column" flexGrow={1} minWidth={0} justifyContent="center">
+                  <Button
+                    key={`agent-${a.id}`}
+                    plain
+                    label={a.label || a.type || a.id}
+                    onPress={() => update($, expanded, x => (x === a.id ? null : a.id))}
+                  />
+                  <Text color={STATUS_COLOR[a.status]}>
+                    {STATUS_GLYPH[a.status]} {STATUS_LABEL[a.status]}
+                    {when}
+                  </Text>
+                  <Text color={VESUVIUS.ash} wrap="truncate-end">
+                    {model}
+                    {a.type && a.type !== 'main' ? ` · ${a.type}` : ''}
+                  </Text>
+                  <Box
+                    flexDirection="row"
+                    justifyContent="space-between"
+                    flexWrap="wrap"
+                    columnGap={2}
+                  >
+                    <Text>
+                      <Text bold>{formatTokens(total)}</Text>{' '}
+                      <Text color={VESUVIUS.ash}>{`${share}%`}</Text>
+                    </Text>
+                    <Text color={VESUVIUS.ash} wrap="truncate-end">
+                      {a.steps} {a.steps === 1 ? 'richiesta' : 'richieste'} · {a.tools}{' '}
+                      {a.tools === 1 ? 'strumento' : 'strumenti'}
+                    </Text>
+                  </Box>
+                </Box>
+              </Box>
+            )}
             {a.id === open && (
               <Box flexDirection="column" marginTop={1} paddingX={1}>
                 <Text bold>Registro agente</Text>
+                {desktop && (
+                  <Text size="footnote" color={VESUVIUS.ash}>
+                    {a.type} · {a.steps} richieste · {a.tools} strumenti
+                  </Text>
+                )}
                 {journal(entries.filter(entry => entry.agent === a.id).slice(0, 5))}
                 <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
                   {tile('INPUT', formatTokens(a.input), VESUVIUS.gulf)}
@@ -840,7 +944,7 @@ export const register: Register = on => {
                 </Box>
                 <Text>
                   <Text bold>{formatTokens(g.tokens)}</Text>{' '}
-                  <Text color={VESUVIUS.ash}>{`${shareOf(g.tokens)}% ${isOpen ? '▾' : '▸'}`}</Text>
+                  <Text color={VESUVIUS.ash}>{`${shareOf(g.tokens)}%`}</Text>
                 </Text>
               </Box>
             </Box>
@@ -865,20 +969,31 @@ export const register: Register = on => {
       }
 
       return (
-        <Box flexDirection="column" rowGap={1}>
-          {header}
-          <Text color={VESUVIUS.ash}>In scena</Text>
-          <Box flexDirection="column" rowGap={1}>
+        <Box flexDirection="column" rowGap={desktop ? 'md' : 1} paddingX={desktop ? 'sm' : 0}>
+          {heading}
+          <Box {...card} flexDirection="column" rowGap={desktop ? 'xs' : 1}>
+            <Box flexDirection="row" justifyContent="space-between">
+              <Text size="heading" weight="semibold">
+                In scena
+              </Text>
+              {desktop && (
+                <Text size="footnote" mono color="#8ACBC7">
+                  {running.length} al lavoro
+                </Text>
+              )}
+            </Box>
             {stage.map(actor)}
           </Box>
           {archive.length > 0 && (
             <Box flexDirection="column">
-              <Text color={VESUVIUS.ash}>Archivio</Text>
+              <Text size="heading" weight="semibold">
+                Archivio
+              </Text>
               {archive.map(shelf)}
             </Box>
           )}
           <Box flexDirection="row" justifyContent="space-between">
-            <Text color={VESUVIUS.ash}>Seleziona un agente per il registro</Text>
+            {!desktop && <Text color={VESUVIUS.ash}>Seleziona un agente per il registro</Text>}
             {archive.length > 0 && (
               <Button key="clear" plain label="svuota archivio" onPress={() => clearArchive($)} />
             )}
